@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "package": "swift-ai-amazon-bedrock",
+  "version": "1.0.0",
+  "releaseID": "modular-3",
+  "source": {
+    "commit": "7fc9b4cd72f8f83b75ba7eee2e38d37127539317",
+    "baseCommit": "7fc9b4cd72f8f83b75ba7eee2e38d37127539317",
+    "workingTree": false,
+    "inputsSHA256": "49b802ba4a30454f78c9886ab3114537ef659ab3e6db7775479b7351f6e3f0ab"
+  },
+  "dependencies": [
+    {
+      "package": "swift-ai-core",
+      "from": "1.1.0"
+    },
+    {
+      "package": "swift-ai-anthropic",
+      "from": "1.0.0"
+    },
+    {
+      "package": "swift-ai-openai",
+      "from": "1.0.0"
+    },
+    {
+      "package": "swift-ai-openai-compatible",
+      "from": "1.0.0"
+    }
+  ],
+  "changes": [
+    {
+      "id": "remaining-package-extraction",
+      "notes": "Extract the existing runtime, typed settings and standalone tests from the compatibility aggregate. Preserve the reviewed npm baseline and existing capability/gap boundaries.",
+      "compatibility": "Initial independent Swift package version. Existing SwiftAISDK entry points remain in the development compatibility facade; no npm-version equivalence is implied."
+    }
+  ],
+  "canonicalDirectory": "Packages/swift-ai-amazon-bedrock",
+  "upstream": [
+    {
+      "name": "@ai-sdk/amazon-bedrock",
+      "reviewedVersion": "5.0.124",
+      "ledgerKind": "provider",
+      "evidence": "`AIProviders.amazonBedrock`, `AIProviders.amazonBedrockAnthropic`, `AIProviders.bedrockMantle`, `AmazonBedrockModels.swift`, `AmazonBedrockTests.swift`, `AnthropicBedrockUpstream202609Tests.swift`",
+      "reviewStatus": "imported-reviewed-with-gaps",
+      "archiveIntegrity": "sha512-nm05hQoPUySR49bSbtBnptBfnsKbg5t1D+LxQWL+dBCmZtPAvund1FO9CFGVOP3GrNCqMYKHSwzS8arNjSfCwA==",
+      "sourceRef": "npm:@ai-sdk/amazon-bedrock@5.0.124",
+      "testRef": "682e2dd71456f14f9da33a1b983d1998c3a1184c",
+      "testRefRelationship": "inventory-snapshot-not-release-verified",
+      "contractFamilies": [],
+      "contractReview": "not-imported; inspect upstream declarations before extraction"
+    }
+  ],
+  "note": "Independent port. Imported test refs and contract review gaps retain their original status; export is not new upstream parity proof.",
+  "canonicalInputs": [
+    {
+      "canonicalPath": ".github/workflows/package-check.yml",
+      "sha256": "7ff448e130f7aed96c38accdf828b6d993997ebc5317358347e9a70a649e67ca"
+    },
+    {
+      "canonicalPath": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Package.swift",
+      "sha256": "736f24ac737cca9f0834833bd97a9fd04555fa7bd21c4ea60522702128f6e446"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Porting/map.json",
+      "sha256": "88652c8d9a44fc54d597e990aa96ca1f3e89fdc4c21b78899862c71cc6965c91"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/README.md",
+      "sha256": "786ecefebfdc96e85873976d87277bf68210cd03af007dba5a7cfeebd3e83a8b"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockAnthropicLanguageModel.swift",
+      "sha256": "eaedcf7c7a6a527a16063ab8accd4ddf8aedf3e32955ead379a0599b1fe5e135"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockEmbeddingModel.swift",
+      "sha256": "cf10e3f7c4f667f41393018b24da651763a77b8b88309db3d00067dc9ee91615"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockImageInputCapabilities.swift",
+      "sha256": "2ef4b2bb89452d58697e8af4206f6ee205c7502584c298fe4519dfe143c69d46"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockImageModel.swift",
+      "sha256": "ebf629a8ec91c959d9b951e527222713b0e0b44f5e5abb1700df478c8b8be37a"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockLanguageModel.swift",
+      "sha256": "527fc93608109dab3f3bc10b40200f79fe7cd72af60dce2c9612f888005fedcd"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockModels.swift",
+      "sha256": "e7f284acd3ed521ec06212ddef73bd4f3822639ac344e102cda208103ba716d3"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockProvider.swift",
+      "sha256": "fa4f2a64101c1f8a6fdaa9aa0c32c6fafc9fbe1b49c78fd8540e07dc0f307179"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockRerankingModel.swift",
+      "sha256": "0caf2deead08c9ce10df3cf377133d468093c9f6b30f7421125ddd59506bc745"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockShared.swift",
+      "sha256": "50ebc8b5b862a9ac8ebe8676ee6633853784ab6e77eeed9fee6ff56546eaefc7"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AnthropicBedrockAdapter.swift",
+      "sha256": "4286db5dc8dd5c3feeb842140438d96046baa4bd3465f722d025706e16da0fc3"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/BedrockStreamParsing.swift",
+      "sha256": "cff53e9bab5c101198fbee692c6c6d7a39802916ef33b60bc1eae115cfec4401"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockEventStreamParserTests.swift",
+      "sha256": "ca547c3ce7f50b8b0c4ab54af5531c7bb601eca16bf4a18464eaeabd9579af27"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockMediaAndRerankingTests.swift",
+      "sha256": "df2c823f98097de3944bd60c52ba43f0a645e1c5db2e21ea4b22b19ba953e62c"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockTests.swift",
+      "sha256": "6f208d45efa883bf9ef1c9dd7b88c2880428a70d4c640d11ecf91804eec62871"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockUpstream5068Tests.swift",
+      "sha256": "8ab55a83c2aa1f88dc0e6b248890aaa037187d9147739ee70ef7ecfb59ec31ea"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/FixtureDownloadTransport.swift",
+      "sha256": "47aac9d8e204dbf6df33a744e80059c1d41fe739406b4196589ce44757585ccc"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/TestSupport.swift",
+      "sha256": "d4c889202ffb0874ccaf33f66f8428a796b1fc9223744f542a50f74995d0ee6e"
+    }
+  ]
+}

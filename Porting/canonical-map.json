@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "package": "swift-ai-amazon-bedrock",
+  "status": "coarse-import",
+  "upstream": [
+    {
+      "name": "@ai-sdk/amazon-bedrock",
+      "implementation": [
+        "packages/amazon-bedrock/src"
+      ],
+      "tests": [
+        "packages/amazon-bedrock/src/amazon-bedrock-anthropic-model-support.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-api-types.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-chat-language-model-event-stream.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-chat-language-model-options.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-chat-language-model.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-embedding-model.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-error.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-event-stream-decoder.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-event-stream-response-handler.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-image-model.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-prepare-tools.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-provider.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-sigv4-fetch.test.ts",
+        "packages/amazon-bedrock/src/amazon-bedrock-usage-raw.test.ts",
+        "packages/amazon-bedrock/src/anthropic/amazon-bedrock-anthropic-fetch.test.ts",
+        "packages/amazon-bedrock/src/anthropic/amazon-bedrock-anthropic-provider.test.ts",
+        "packages/amazon-bedrock/src/convert-amazon-bedrock-usage.test.ts",
+        "packages/amazon-bedrock/src/convert-to-amazon-bedrock-chat-messages.test.ts",
+        "packages/amazon-bedrock/src/inject-fetch-headers.test.ts",
+        "packages/amazon-bedrock/src/lazy-schemas.test.ts",
+        "packages/amazon-bedrock/src/mantle/bedrock-mantle-provider.test.ts",
+        "packages/amazon-bedrock/src/normalize-tool-call-id.test.ts",
+        "packages/amazon-bedrock/src/region-validation.test.ts",
+        "packages/amazon-bedrock/src/reranking/amazon-bedrock-reranking-model.test.ts",
+        "packages/amazon-bedrock/src/resolve-amazon-bedrock-base-url.test.ts"
+      ]
+    }
+  ],
+  "swift": {
+    "sources": [
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockAnthropicLanguageModel.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockEmbeddingModel.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockImageInputCapabilities.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockImageModel.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockLanguageModel.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockModels.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockProvider.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockRerankingModel.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockShared.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AnthropicBedrockAdapter.swift",
+      "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/BedrockStreamParsing.swift",
+      "Packages/swift-ai-xai/Sources/SwiftAIXAI/ImageInputCapabilities.swift"
+    ],
+    "tests": [
+      "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockEventStreamParserTests.swift",
+      "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockMediaAndRerankingTests.swift",
+      "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockTests.swift",
+      "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockUpstream5068Tests.swift",
+      "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/FixtureDownloadTransport.swift",
+      "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/TestSupport.swift"
+    ],
+    "resources": []
+  },
+  "differences": [
+    {
+      "kind": "native-adaptation",
+      "reason": "Preserve Swift async/await, Sendable, Foundation transport and existing documented gaps; see Docs/CoreV6Parity.md and PortingStatus.md."
+    }
+  ],
+  "reviewNote": "M6: provider implementation and focused tests extracted; neutral AWS signing lives in core, Anthropic behavior is shared without copies. Baselines, capabilities and known gaps remain unchanged."
+}
