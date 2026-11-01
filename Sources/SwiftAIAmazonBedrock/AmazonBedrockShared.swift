@@ -184,7 +184,7 @@ func bedrockResponseJSONSchema(from responseFormat: AIResponseFormat?) -> JSONVa
 
 func bedrockReasoningConfigEnabled(_ value: JSONValue?) -> Bool {
     let type = value?["type"]?.stringValue
-    return type == "enabled" || type == "adaptive"
+    return type == "enabled" || type == "adaptive" || type == "between_tools"
 }
 
 func bedrockApplyRequestProviderOptions(_ providerOptions: [String: JSONValue], to body: inout [String: JSONValue]) {
@@ -518,15 +518,28 @@ func bedrockSanitizeDocumentName(_ filename: String) -> String {
     return String(trimmed.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-func bedrockDocumentName(_ filename: String?, documentCounter: inout Int) -> String {
-    if let filename {
-        let sanitized = bedrockSanitizeDocumentName(filename)
-        if !sanitized.isEmpty {
-            return sanitized
-        }
+struct BedrockDocumentNames {
+    var counter = 0
+    var used: Set<String> = []
+}
+
+func bedrockDocumentName(_ filename: String?, documentCounter: inout BedrockDocumentNames) -> String {
+    let sanitized = filename.map(bedrockSanitizeDocumentName) ?? ""
+    let base: String
+    if !sanitized.isEmpty { base = sanitized }
+    else {
+        documentCounter.counter += 1
+        base = "document-\(documentCounter.counter)"
     }
-    documentCounter += 1
-    return "document-\(documentCounter)"
+    var name = base
+    var suffix = 2
+    while documentCounter.used.contains(name) {
+        let suffixText = " (\(suffix))"
+        name = String(base.prefix(200 - suffixText.count)).trimmingCharacters(in: .whitespacesAndNewlines) + suffixText
+        suffix += 1
+    }
+    documentCounter.used.insert(name)
+    return name
 }
 
 func bedrockUsesAnthropicProviderTools(
@@ -612,7 +625,7 @@ func bedrockApplyReasoningConfig(
     let openAIModelID = bedrockOpenAIModelID(modelID)
     let isOpenAIModel = openAIModelID != nil
     let isOpenAIGptOssModel = openAIModelID?.hasPrefix("openai.gpt-oss-") == true
-    let isAnthropicThinkingEnabled = isAnthropicModel && (type == "enabled" || type == "adaptive")
+    let isAnthropicThinkingEnabled = isAnthropicModel && (type == "enabled" || type == "adaptive" || type == "between_tools")
 
     if isAnthropicModel && type == "disabled" {
         bedrockMergeAdditionalModelRequestFields(["thinking": .object(["type": .string("disabled")])], into: &providerOptions)
@@ -626,6 +639,8 @@ func bedrockApplyReasoningConfig(
                     "budget_tokens": .number(Double(budgetTokens))
                 ])
             ], into: &providerOptions)
+        } else if type == "between_tools" {
+            bedrockMergeAdditionalModelRequestFields(["thinking": ["type": "between_tools"]], into: &providerOptions)
         } else if type == "adaptive" {
             var thinking: [String: JSONValue] = ["type": .string("adaptive")]
             if let display {
@@ -678,6 +693,59 @@ func bedrockApplyReasoningConfig(
     }
 }
 
+func bedrockNormalizeDisabledThinking(
+    modelID: String,
+    modelFamily: AmazonBedrockChatModelFamily?,
+    explicitReasoningEffort: String?,
+    explicitlyDisabled: Bool,
+    providerOptions: inout [String: JSONValue],
+    warnings: inout [AIWarning]
+) {
+    guard var config = providerOptions["reasoningConfig"]?.objectValue,
+          config["type"] == "disabled",
+          bedrockIsAnthropicModel(modelID: modelID, modelFamily: modelFamily, reasoningConfig: .object(config)) else { return }
+    let capabilities = anthropicModelCapabilities(modelID)
+    var type = "disabled"
+    config.removeValue(forKey: "budgetTokens")
+    config.removeValue(forKey: "display")
+    if modelID.range(of: #"claude-(?:instant|v?2|3-(?:5-)?(?:haiku|sonnet|opus))(?=[-.:]|$)"#, options: .regularExpression) != nil {
+        providerOptions.removeValue(forKey: "reasoningConfig")
+        return
+    }
+    if capabilities.rejectsThinkingDisabled {
+        type = capabilities.supportsBetweenToolsThinking ? "between_tools" : "adaptive"
+        config["type"] = .string(type)
+        if !explicitlyDisabled, type == "adaptive" {
+            if config["maxReasoningEffort"] == nil, let explicitReasoningEffort {
+                config["maxReasoningEffort"] = .string(explicitReasoningEffort)
+            }
+            if config["maxReasoningEffort"] == nil,
+               providerOptions["additionalModelRequestFields"]?["output_config"]?["effort"] == nil {
+                config["maxReasoningEffort"] = "low"
+            }
+        }
+        warnings.append(AIWarning(
+            type: explicitlyDisabled ? "unsupported" : "compatibility",
+            feature: explicitlyDisabled ? "providerOptions.amazonBedrock.reasoningConfig" : "reasoning",
+            message: "thinking cannot be disabled for \(modelID). Using '\(type)' thinking instead."
+        ))
+    }
+    let effort = config["maxReasoningEffort"]?.stringValue
+        ?? providerOptions["additionalModelRequestFields"]?["output_config"]?["effort"]?.stringValue
+    if ((type == "disabled" && capabilities.rejectsThinkingDisabledAboveHighEffort) || type == "between_tools"),
+       let effort, effort == "xhigh" || effort == "max" {
+        warnings.append(AIWarning(
+            type: "unsupported",
+            feature: config["maxReasoningEffort"] != nil
+                ? "providerOptions.amazonBedrock.reasoningConfig.maxReasoningEffort"
+                : "providerOptions.amazonBedrock.additionalModelRequestFields.output_config.effort",
+            message: "effort '\(effort)' is not supported by \(modelID) with '\(type)' thinking. The effort has been lowered to 'high'."
+        ))
+        config["maxReasoningEffort"] = "high"
+    }
+    providerOptions["reasoningConfig"] = .object(config)
+}
+
 func bedrockApplyTopLevelReasoning(
     _ reasoning: String?,
     modelID: String,
@@ -703,10 +771,8 @@ func bedrockApplyTopLevelReasoning(
     let capabilities = anthropicModelCapabilities(modelID)
     let isOpenAIModel = bedrockOpenAIModelID(modelID) != nil
     let isNovaReasoningModel = modelID.contains("amazon.nova-2-lite-v1:0")
-    let effortMap = [
-        "minimal": "low", "low": "low", "medium": "medium",
-        "high": "high", "xhigh": "max", "max": "max"
-    ]
+    var effortMap = ["low": "low", "medium": "medium", "high": "high", "max": "max"]
+    if capabilities.supportsXhighEffort { effortMap["xhigh"] = "xhigh" }
     var reasoningConfig = explicit ?? [:]
 
     if isAnthropicModel {
@@ -732,19 +798,23 @@ func bedrockApplyTopLevelReasoning(
                 }
             }
         }
-    } else if reasoning != "none", isOpenAIModel || isNovaReasoningModel || explicit != nil {
+    } else if reasoning == "none", isNovaReasoningModel {
+        // Omit Nova 2 reasoning settings to disable reasoning.
+    } else if isOpenAIModel || isNovaReasoningModel || explicit != nil {
         if isNovaReasoningModel, reasoningConfig["type"] == nil { reasoningConfig["type"] = "enabled" }
         if reasoningConfig["maxReasoningEffort"] == nil,
            let effort = mapReasoningToProviderEffort(
                reasoning: reasoning,
-               effortMap: isNovaReasoningModel
-                   ? ["minimal": "low", "low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"]
-                   : effortMap,
+               effortMap: isNovaReasoningModel || bedrockOpenAIModelID(modelID)?.hasPrefix("openai.gpt-oss-") == true
+                   ? ["low": "low", "medium": "medium", "high": "high"]
+                   : isOpenAIModel
+                       ? ["none": "none", "minimal": "minimal", "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max"]
+                       : effortMap,
                warnings: &warnings
            ) {
             reasoningConfig["maxReasoningEffort"] = .string(effort)
         }
-    } else if reasoning != "none" {
+    } else {
         warnings.append(AIWarning(
             type: "unsupported",
             feature: "reasoning",
@@ -838,7 +908,7 @@ func bedrockJSONString(_ value: JSONValue) -> String? {
     return String(data: data, encoding: .utf8)
 }
 
-func bedrockToolResultContent(_ result: AIToolResult, documentCounter: inout Int) throws -> [JSONValue] {
+func bedrockToolResultContent(_ result: AIToolResult, documentCounter: inout BedrockDocumentNames) throws -> [JSONValue] {
     let output = result.modelOutput ?? result.result
     if let text = output.stringValue {
         return [.object(["text": .string(text)])]
@@ -862,7 +932,7 @@ func bedrockToolResultContent(_ result: AIToolResult, documentCounter: inout Int
     }
 }
 
-func bedrockToolResultContentPart(_ item: JSONValue, documentCounter: inout Int) throws -> JSONValue {
+func bedrockToolResultContentPart(_ item: JSONValue, documentCounter: inout BedrockDocumentNames) throws -> JSONValue {
     switch item["type"]?.stringValue {
     case "text":
         return .object(["text": item["text"] ?? item["value"] ?? .string("")])

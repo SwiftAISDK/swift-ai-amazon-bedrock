@@ -25,6 +25,7 @@
         "packages/amazon-bedrock/src/amazon-bedrock-usage-raw.test.ts",
         "packages/amazon-bedrock/src/anthropic/amazon-bedrock-anthropic-fetch.test.ts",
         "packages/amazon-bedrock/src/anthropic/amazon-bedrock-anthropic-provider.test.ts",
+        "packages/amazon-bedrock/src/anthropic/amazon-bedrock-anthropic-structured-output.test.ts",
         "packages/amazon-bedrock/src/convert-amazon-bedrock-usage.test.ts",
         "packages/amazon-bedrock/src/convert-to-amazon-bedrock-chat-messages.test.ts",
         "packages/amazon-bedrock/src/inject-fetch-headers.test.ts",
@@ -57,7 +58,8 @@
       "Tests/SwiftAIAmazonBedrockTests/AmazonBedrockTests.swift",
       "Tests/SwiftAIAmazonBedrockTests/AmazonBedrockUpstream5068Tests.swift",
       "Tests/SwiftAIAmazonBedrockTests/FixtureDownloadTransport.swift",
-      "Tests/SwiftAIAmazonBedrockTests/TestSupport.swift"
+      "Tests/SwiftAIAmazonBedrockTests/TestSupport.swift",
+      "Tests/SwiftAIAmazonBedrockTests/Weekly20261101BedrockTests.swift"
     ],
     "resources": []
   },
@@ -65,9 +67,13 @@
     {
       "kind": "native-adaptation",
       "reason": "Preserve Swift async/await, Sendable, Foundation transport and existing documented gaps; see Docs/CoreV6Parity.md and PortingStatus.md."
+    },
+    {
+      "kind": "native-adaptation",
+      "reason": "2026-11-01 reviewed 5.0.124 -> 5.0.130; integrity-verified archives and package/version-checked matching-release tests 612be2311464804d1e4897afacbf8f3fc2f6d9e3 -> 028a025398782f4938303f48fbeee45c79af544b. Ported disabled-thinking model gates, preserved/clamped effort, shared effort fallback, unique per-request document names and lazy validated bearer callbacks across Converse/invoke/Mantle. Tests Weekly20261101Bedrock. Existing unknown-provider-tool warnings already interpolate the identifier; JS resolver typing is a native async closure adaptation. Anthropic invoke inherits schema/text fallback; existing single-response stream boundary retained."
     }
   ],
-  "reviewNote": "M6: provider implementation and focused tests extracted; neutral AWS signing lives in core, Anthropic behavior is shared without copies. Baselines, capabilities and known gaps remain unchanged.",
+  "reviewNote": "M6: provider implementation and focused tests extracted; neutral AWS signing lives in core, Anthropic behavior is shared without copies. Baselines, capabilities and known gaps remain unchanged. 2026-11-01 reviewed 5.0.124 -> 5.0.130; integrity-verified archives and package/version-checked matching-release tests 612be2311464804d1e4897afacbf8f3fc2f6d9e3 -> 028a025398782f4938303f48fbeee45c79af544b. Ported disabled-thinking model gates, preserved/clamped effort, shared effort fallback, unique per-request document names and lazy validated bearer callbacks across Converse/invoke/Mantle. Tests Weekly20261101Bedrock. Existing unknown-provider-tool warnings already interpolate the identifier; JS resolver typing is a native async closure adaptation. Anthropic invoke inherits schema/text fallback; existing single-response stream boundary retained.",
   "canonicalOnlyReferences": [
     {
       "kind": "sources",

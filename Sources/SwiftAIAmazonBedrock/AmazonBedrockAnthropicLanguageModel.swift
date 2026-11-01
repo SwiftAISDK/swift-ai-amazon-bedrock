@@ -25,7 +25,8 @@ public final class AmazonBedrockAnthropicLanguageModel: LanguageModel, @unchecke
             citationDocuments: anthropicCitationDocuments(from: request.messages),
             usesJSONToolResponseFormat: prepared.usesJSONToolResponseFormat,
             toolNameMapping: prepared.toolNameMapping,
-            markCodeExecutionDynamic: prepared.markCodeExecutionDynamic
+            markCodeExecutionDynamic: prepared.markCodeExecutionDynamic,
+            stopReason: raw["stop_reason"]?.stringValue
         )
         guard let text = generatedContent.text else {
             throw AIError.invalidResponse(provider: providerID, message: "No text block found in Bedrock Anthropic response.")
@@ -84,7 +85,7 @@ public final class AmazonBedrockAnthropicLanguageModel: LanguageModel, @unchecke
                         providerID: providerID,
                         ignoresTextBlocks: prepared.usesJSONToolResponseFormat
                     )
-                    var jsonToolText = AnthropicStreamingJSONToolText()
+                    var jsonToolText = AnthropicStreamingJSONToolText(providerID: providerID, captureFallbackText: prepared.usesJSONToolResponseFormat)
                     var providerToolResults = AnthropicStreamingProviderToolResults(
                         providerID: providerID,
                         toolNameMapping: prepared.toolNameMapping
@@ -229,7 +230,7 @@ public final class AmazonBedrockAnthropicLanguageModel: LanguageModel, @unchecke
                             for part in contentBlocks.apply(event: raw, citationDocuments: streamingSources.citationDocuments) {
                                 continuation.yield(part)
                             }
-                            for part in jsonToolText.apply(event: raw) {
+                            for part in jsonToolText.apply(event: raw, citationDocuments: streamingSources.citationDocuments) {
                                 continuation.yield(part)
                             }
                             for part in providerToolResults.apply(event: raw) {

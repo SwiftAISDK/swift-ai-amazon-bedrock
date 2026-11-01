@@ -10,10 +10,10 @@ let package = Package(
         .library(name: "SwiftAIAmazonBedrock", targets: ["SwiftAIAmazonBedrock"])
     ],
     dependencies: [
-        .package(url: "https://github.com/SwiftAISDK/swift-ai-core.git", from: "1.1.0"),
-        .package(url: "https://github.com/SwiftAISDK/swift-ai-anthropic.git", from: "1.0.0"),
-        .package(url: "https://github.com/SwiftAISDK/swift-ai-openai.git", from: "1.0.0"),
-        .package(url: "https://github.com/SwiftAISDK/swift-ai-openai-compatible.git", from: "1.0.0")
+        .package(url: "https://github.com/SwiftAISDK/swift-ai-core.git", from: "1.2.0"),
+        .package(url: "https://github.com/SwiftAISDK/swift-ai-anthropic.git", from: "1.2.0"),
+        .package(url: "https://github.com/SwiftAISDK/swift-ai-openai.git", from: "1.1.0"),
+        .package(url: "https://github.com/SwiftAISDK/swift-ai-openai-compatible.git", from: "1.1.0")
     ],
     targets: [
         .target(name: "SwiftAIAmazonBedrock", dependencies: [.product(name: "SwiftAIProvider", package: "swift-ai-core"), .product(name: "SwiftAITransport", package: "swift-ai-core"), .product(name: "SwiftAIProviderUtilities", package: "swift-ai-core"), .product(name: "SwiftAIAnthropic", package: "swift-ai-anthropic"), .product(name: "SwiftAIOpenAI", package: "swift-ai-openai"), .product(name: "SwiftAIOpenAICompatible", package: "swift-ai-openai-compatible")]),

@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 1.1.0
 
-- Extract the existing runtime, typed settings and standalone tests from the compatibility aggregate. Preserve the reviewed npm baseline and existing capability/gap boundaries.
-  Compatibility: Initial independent Swift package version. Existing SwiftAISDK entry points remain in the development compatibility facade; no npm-version equivalence is implied.
+- Lazy API-key callback auth with blank rejection and trimming, covering Converse/invoke/Mantle and all HTTP runtime operations. Disabled-thinking model support: omit for Claude<=3.5, preserve supported disabled, warn/fallback to between_tools or adaptive when required. Preserve typed/raw effort during adaptive fallback; clamp incompatible above-high effort without dropping sibling output_config data. Reasoning supported-level maps now use lower-first shared effort fallback; GPT-OSS restricted efforts and other OpenAI effort passthrough. Deterministic document-name deduplication across messages and tool results with suffixes within 200 characters. Invoke-model Anthropic native-schema fallback and JSON text fallback inherit shared adapter. Reviewed upstream: @ai-sdk/amazon-bedrock 5.0.124 to 5.0.130. Validation passed: node Scripts/test-packages.mjs (all 52 owning package suites and the compatibility facade); node Scripts/sdk.mjs generate --check; node --test Scripts/tests/*.test.cjs (27 passed); docs-site check and build (100 pages). Live provider calls were not run.
+  Compatibility: Minor release for additive native API; existing static settings and call sites remain compatible. Updated direct dependency minimums are recorded in the manifest. Existing documented JS/framework and native product gaps remain; version-delta review does not imply full parity or live-service testing. Explicit custom authentication skips an unused credential supplier, a deliberate native callback-order adaptation.

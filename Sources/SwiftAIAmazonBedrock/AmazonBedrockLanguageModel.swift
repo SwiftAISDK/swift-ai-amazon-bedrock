@@ -161,6 +161,7 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
     private func converseBody(for request: LanguageModelRequest) throws -> BedrockPreparedConverseCall {
         var providerOptions = try bedrockRequestProviderOptions(providerOptions: request.providerOptions, extraBody: request.extraBody)
         var warnings: [AIWarning] = []
+        let explicitReasoningEffort = providerOptions["reasoningConfig"]?["maxReasoningEffort"]?.stringValue
         bedrockApplyTopLevelReasoning(
             request.reasoning,
             modelID: modelID,
@@ -169,8 +170,19 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             providerOptions: &providerOptions,
             warnings: &warnings
         )
+        bedrockNormalizeDisabledThinking(
+            modelID: modelID,
+            modelFamily: settings.modelFamily,
+            explicitReasoningEffort: explicitReasoningEffort,
+            explicitlyDisabled: request.providerOptions["amazonBedrock"]?["reasoningConfig"]?["type"] == "disabled"
+                || request.providerOptions["bedrock"]?["reasoningConfig"]?["type"] == "disabled"
+                || request.extraBody["amazonBedrock"]?["reasoningConfig"]?["type"] == "disabled"
+                || request.extraBody["bedrock"]?["reasoningConfig"]?["type"] == "disabled",
+            providerOptions: &providerOptions,
+            warnings: &warnings
+        )
         let enableDocumentCitations = bedrockDocumentCitationsEnabled(providerOptions)
-        var documentCounter = 0
+        var documentCounter = BedrockDocumentNames()
         if request.frequencyPenalty != nil {
             warnings.append(AIWarning(type: "unsupported", feature: "frequencyPenalty"))
         }

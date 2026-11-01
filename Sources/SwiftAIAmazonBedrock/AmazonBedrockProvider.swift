@@ -8,7 +8,7 @@ import SwiftAITransport
 import SwiftAIProviderUtilities
 
 
-private let amazonBedrockUserAgent = "ai-sdk-amazon-bedrock/5.0.124"
+private let amazonBedrockUserAgent = "ai-sdk-amazon-bedrock/5.0.130"
 
 public struct AmazonBedrockCredentials: Sendable {
     public var accessKeyID: String
@@ -25,6 +25,8 @@ public struct AmazonBedrockCredentials: Sendable {
 public struct AmazonBedrockProviderSettings: Sendable {
     public var region: String?
     public var apiKey: String?
+    /// Resolved before each request; returned bearer tokens must be non-empty.
+    public var apiKeyProvider: (@Sendable () async throws -> String)?
     public var accessKeyID: String?
     public var secretAccessKey: String?
     public var sessionToken: String?
@@ -44,10 +46,12 @@ public struct AmazonBedrockProviderSettings: Sendable {
         baseURL: String? = nil,
         headers: [String: String] = [:],
         transport: any AITransport = URLSessionTransport.shared,
-        date: @escaping @Sendable () -> Date = Date.init
+        date: @escaping @Sendable () -> Date = Date.init,
+        apiKeyProvider: (@Sendable () async throws -> String)? = nil
     ) {
         self.region = region
         self.apiKey = apiKey
+        self.apiKeyProvider = apiKeyProvider
         self.accessKeyID = accessKeyID
         self.secretAccessKey = secretAccessKey
         self.sessionToken = sessionToken
@@ -309,10 +313,20 @@ func resolveAmazonBedrockBaseURL(
 
 enum BedrockAuth: Sendable {
     case bearer(String)
+    case bearerProvider(@Sendable () async throws -> String)
     case sigV4(@Sendable () async throws -> AWSSigningCredentials)
 }
 
 private func bedrockAuth(settings: AmazonBedrockProviderSettings, providerID: String, fallbackToEnvironmentSessionTokenForExplicitKeys: Bool = true) throws -> BedrockAuth {
+    if let resolve = settings.apiKeyProvider {
+        return .bearerProvider {
+            let key = try await resolve().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else {
+                throw AIError.invalidArgument(argument: "apiKeyProvider", message: "Amazon Bedrock API key must be a non-empty string.")
+            }
+            return key
+        }
+    }
     let rawAPIKey = settings.apiKey ?? environmentValue(["AWS_BEARER_TOKEN_BEDROCK"])
     if let apiKey = rawAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty {
         return .bearer(apiKey)
@@ -380,6 +394,11 @@ private final class BedrockSigningTransport: AIStreamingTransport, @unchecked Se
             var signed = request
             signed.headers["Authorization"] = signed.headers["Authorization"] ?? "Bearer \(apiKey)"
             return signed
+        case let .bearerProvider(resolve):
+            var signed = request
+            signed.headers = normalizeHeaders(signed.headers)
+            signed.headers["authorization"] = "Bearer \(try await resolve())"
+            return signed
         case let .sigV4(credentialsProvider):
             let credentials = try await credentialsProvider()
             return try AWSSigV4.sign(
@@ -444,6 +463,11 @@ struct BedrockRuntimeConfig: @unchecked Sendable {
         case let .bearer(apiKey):
             var signed = request
             signed.headers["Authorization"] = signed.headers["Authorization"] ?? "Bearer \(apiKey)"
+            return signed
+        case let .bearerProvider(resolve):
+            var signed = request
+            signed.headers = normalizeHeaders(signed.headers)
+            signed.headers["authorization"] = "Bearer \(try await resolve())"
             return signed
         case let .sigV4(credentialsProvider):
             return try AWSSigV4.sign(

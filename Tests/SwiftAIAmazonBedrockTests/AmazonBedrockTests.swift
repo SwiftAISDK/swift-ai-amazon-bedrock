@@ -42,7 +42,7 @@ import Testing
     #expect(request.headers["authorization"]?.contains("Credential=AKIDEXAMPLE/20240315/us-east-1/bedrock/aws4_request") == true)
     #expect(request.headers["authorization"]?.contains("SignedHeaders=") == true)
     #expect(request.headers["custom-header"] == "value")
-    #expect(request.headers["user-agent"] == "ai-sdk-amazon-bedrock/5.0.124")
+    #expect(request.headers["user-agent"] == "ai-sdk-amazon-bedrock/5.0.130")
     let body = try decodeJSONBody(try #require(request.body))
     #expect(body["system"]?[0]?["text"]?.stringValue == "Brief.")
     #expect(body["messages"]?[0]?["content"]?[0]?["text"]?.stringValue == "Hi")
@@ -110,9 +110,9 @@ import Testing
     let converseRequest = try #require(await converseTransport.requests().first)
     let anthropicRequest = try #require(await anthropicTransport.requests().first)
     let mantleRequest = try #require(await mantleTransport.requests().first)
-    #expect(converseRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.124")
-    #expect(anthropicRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.124")
-    #expect(mantleRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.124")
+    #expect(converseRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.130")
+    #expect(anthropicRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.130")
+    #expect(mantleRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.130")
 }
 @Test func amazonBedrockCredentialProviderSignsAllProviderSurfaces() async throws {
     let fixedDate = DateComponents(
