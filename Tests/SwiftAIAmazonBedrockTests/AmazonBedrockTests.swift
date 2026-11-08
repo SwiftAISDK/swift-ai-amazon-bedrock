@@ -42,7 +42,7 @@ import Testing
     #expect(request.headers["authorization"]?.contains("Credential=AKIDEXAMPLE/20240315/us-east-1/bedrock/aws4_request") == true)
     #expect(request.headers["authorization"]?.contains("SignedHeaders=") == true)
     #expect(request.headers["custom-header"] == "value")
-    #expect(request.headers["user-agent"] == "ai-sdk-amazon-bedrock/5.0.130")
+    #expect(request.headers["user-agent"] == "ai-sdk-amazon-bedrock/5.0.135")
     let body = try decodeJSONBody(try #require(request.body))
     #expect(body["system"]?[0]?["text"]?.stringValue == "Brief.")
     #expect(body["messages"]?[0]?["content"]?[0]?["text"]?.stringValue == "Hi")
@@ -110,9 +110,9 @@ import Testing
     let converseRequest = try #require(await converseTransport.requests().first)
     let anthropicRequest = try #require(await anthropicTransport.requests().first)
     let mantleRequest = try #require(await mantleTransport.requests().first)
-    #expect(converseRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.130")
-    #expect(anthropicRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.130")
-    #expect(mantleRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.130")
+    #expect(converseRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.135")
+    #expect(anthropicRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.135")
+    #expect(mantleRequest.headers["user-agent"] == "CustomApp/1.0 ai-sdk-amazon-bedrock/5.0.135")
 }
 @Test func amazonBedrockCredentialProviderSignsAllProviderSurfaces() async throws {
     let fixedDate = DateComponents(
@@ -273,11 +273,12 @@ import Testing
     #expect(body["serviceTier"]?["type"]?.stringValue == "priority")
     #expect(body["additionalModelRequestFields"]?["custom"]?.stringValue == "value")
     let tools = try #require(body["toolConfig"]?["tools"]?.arrayValue)
-    #expect(tools.count == 1)
-    #expect(tools[0]["toolSpec"]?["name"]?.stringValue == "weather")
-    #expect(tools[0]["toolSpec"]?["description"]?.stringValue == "Look up weather.")
-    #expect(tools[0]["toolSpec"]?["inputSchema"]?["json"]?["properties"]?["city"]?["type"]?.stringValue == "string")
-    #expect(body["toolConfig"]?["toolChoice"]?["tool"]?["name"]?.stringValue == "weather")
+    #expect(tools.count == 2)
+    let weather = try #require(tools.first { $0["toolSpec"]?["name"] == "weather" })
+    #expect(weather["toolSpec"]?["name"]?.stringValue == "weather")
+    #expect(weather["toolSpec"]?["description"]?.stringValue == "Look up weather.")
+    #expect(weather["toolSpec"]?["inputSchema"]?["json"]?["properties"]?["city"]?["type"]?.stringValue == "string")
+    #expect(body["additionalModelRequestFields"]?["tool_choice"]?["name"]?.stringValue == "weather")
     #expect(body["amazonBedrock"] == nil)
 }
 @Test func amazonBedrockConverseMapsRichToolResultContentAndCachePoints() async throws {
@@ -499,9 +500,9 @@ import Testing
     for modelID in [
         "anthropic.claude-opus-4-7-20260219-v1:0",
         "anthropic.claude-opus-4-8-20260401-v1:0",
-        "anthropic.claude-opus-5-20260701-v1:0",
+        "anthropic.claude-opus-6-20260701-v1:0",
         "anthropic.claude-fable-5-20260601-v1:0",
-        "anthropic.claude-sonnet-5-20260701-v1:0"
+        "anthropic.claude-sonnet-6-20260701-v1:0"
     ] {
         #expect(!bedrockSupportsStrictToolSpec(modelID: modelID))
         #expect(!bedrockSupportsNativeStructuredOutput(modelID: modelID))
@@ -651,7 +652,7 @@ import Testing
     #expect(sentSchema["additionalProperties"]?.boolValue == false)
     #expect(body["additionalModelRequestFields"]?["thinking"]?["type"]?.stringValue == "enabled")
 }
-@Test func amazonBedrockConverseUsesJSONToolForAnthropicFamiliesWithoutNativeStructuredOutput() async throws {
+@Test func amazonBedrockConverseUsesExplicitJSONToolForAnthropicFamilies() async throws {
     let transport = RecordingTransport(response: jsonResponse("""
     {"output":{"message":{"content":[{"toolUse":{"toolUseId":"json-tool","name":"json","input":{"answer":"ok"}}}]}},"stopReason":"tool_use","usage":{"inputTokens":2,"outputTokens":1,"totalTokens":3}}
     """))
@@ -670,6 +671,7 @@ import Testing
         ]),
         providerOptions: [
             "amazonBedrock": [
+                "structuredOutputMode": "jsonTool",
                 "reasoningConfig": ["type": "enabled", "budgetTokens": 8]
             ]
         ]
@@ -692,7 +694,7 @@ import Testing
         apiKey: "bearer-key",
         transport: transport
     ))
-    let model = try provider.languageModel("anthropic.claude-sonnet-5-20260701-v1:0")
+    let model = try provider.languageModel("anthropic.claude-fable-5-1")
     let schema: JSONValue = [
         "type": "object",
         "properties": ["name": ["type": "string"]],

@@ -102,7 +102,8 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             toolCalls: toolCalls,
             providerMetadata: bedrockProviderMetadata(from: raw, isJsonResponseFromTool: isJsonResponseFromTool),
             rawValue: raw,
-            warnings: prepared.warnings
+            warnings: prepared.warnings,
+            requestMetadata: AIRequestMetadata(body: prepared.body, headers: request.headers, url: try config.request(path: "/model/\(encodedModelID)/converse", body: prepared.body, headers: request.headers, abortSignal: request.abortSignal).url.absoluteString)
         )
     }
 
@@ -118,6 +119,7 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
                         abortSignal: request.abortSignal
                     )
                     let response = try await config.streamRequest(httpRequest)
+                    continuation.yield(.requestMetadata(AIRequestMetadata(body: prepared.body, headers: request.headers, url: httpRequest.url.absoluteString)))
                     try await streamFromBedrockResponse(
                         providerID: providerID,
                         response: response,
@@ -270,7 +272,7 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
         let useNativeStructuredOutput = responseJSONSchema != nil
             && isAnthropicModel
             && (structuredOutputMode == "outputFormat"
-                || (structuredOutputMode == "auto" && modelSupportsNativeStructuredOutput))
+                || (structuredOutputMode == "auto" && modelSupportsNativeStructuredOutput && responseJSONSchema.map(anthropicSupportsNativeStructuredOutputSchema) == true))
         let usesJsonInstruction = responseJSONSchema != nil
             && !useNativeStructuredOutput
             && isAnthropicModel
@@ -293,6 +295,9 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
                 ])
             ], into: &providerOptions)
         } else if let responseJSONSchema, usesJsonResponseTool {
+            let choice = effectiveToolChoice?["type"]?.stringValue
+            let selected = effectiveToolChoice?["toolName"]?.stringValue ?? effectiveToolChoice?["name"]?.stringValue
+            effectiveTools = effectiveTools.filter { name, _ in choice != "none" && (choice != "tool" || name == selected) }
             effectiveTools["json"] = responseJSONSchema
             effectiveToolChoice = .object(["type": .string("required")])
         }
@@ -304,7 +309,6 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             reasoningConfig: providerOptions["reasoningConfig"],
             disableParallelToolUse: request.providerOptions["anthropic"]?["disableParallelToolUse"]?.boolValue
                 ?? request.extraBody["anthropic"]?["disableParallelToolUse"]?.boolValue
-                ?? false
         )
         if let additionalModelRequestFields = preparedTools.additionalModelRequestFields {
             bedrockMergeAdditionalModelRequestFields(additionalModelRequestFields, into: &providerOptions)
@@ -338,6 +342,7 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
                 for part in message.content {
                     switch part {
                     case let .text(text, providerMetadata):
+                        if message.role == .assistant && text.isEmpty && !providerMetadata.isEmpty && providerMetadata["amazonBedrock"] == nil && providerMetadata["bedrock"] == nil { continue }
                         content.append(try bedrockGuardedTextBlock(text: text, providerMetadata: providerMetadata))
                         if let cachePoint = bedrockCachePoint(from: providerMetadata) {
                             content.append(cachePoint)
@@ -530,6 +535,16 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             bedrockAppendConvertedMessage(message, to: &messages)
         }
 
+        if var message = messages.last?.objectValue, message["role"]?.stringValue == "assistant",
+           var content = message["content"]?.arrayValue,
+           let index = content.lastIndex(where: { $0["text"] != nil }),
+           content.dropFirst(index + 1).allSatisfy({ $0["cachePoint"] != nil }),
+           var block = content[index].objectValue, let text = block["text"]?.stringValue {
+            block["text"] = .string(text.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression))
+            content[index] = .object(block)
+            message["content"] = .array(content)
+            messages[messages.count - 1] = .object(message)
+        }
         var body: [String: JSONValue] = ["messages": .array(messages)]
         if !system.isEmpty { body["system"] = .array(system) }
 
@@ -658,7 +673,7 @@ struct BedrockPreparedConverseCall {
 }
 
 func bedrockToolArguments(_ arguments: String) -> JSONValue {
-    let decoded = (try? decodeJSONBody(Data(arguments.utf8))) ?? .object([:])
+    let decoded = (try? decodeJSONBody(Data(arguments.utf8))) ?? .string(arguments)
     guard case .object = decoded else {
         return .object(["rawInvalidInput": decoded])
     }

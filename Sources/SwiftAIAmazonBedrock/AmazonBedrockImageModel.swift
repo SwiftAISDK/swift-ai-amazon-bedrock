@@ -38,6 +38,7 @@ public final class AmazonBedrockImageModel: ImageModel, @unchecked Sendable {
             imageGenerationConfig["height"] = .number(Double(size[1]))
         }
         if let count = request.count { imageGenerationConfig["numberOfImages"] = .number(Double(count)) }
+        if let seed = request.seed { imageGenerationConfig["seed"] = .number(Double(seed)) }
         if let seed = providerOptions["seed"] {
             imageGenerationConfig["seed"] = seed
         } else if let seed = request.extraBody["seed"] {

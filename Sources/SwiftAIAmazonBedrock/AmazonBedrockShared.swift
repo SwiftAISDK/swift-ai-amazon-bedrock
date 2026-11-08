@@ -281,7 +281,7 @@ func bedrockPrepareTools(
     modelID: String,
     modelFamily: AmazonBedrockChatModelFamily? = nil,
     reasoningConfig: JSONValue? = nil,
-    disableParallelToolUse: Bool = false
+    disableParallelToolUse: Bool? = nil
 ) -> BedrockPreparedTools {
     guard !tools.isEmpty else {
         return BedrockPreparedTools(toolConfig: nil, warnings: [])
@@ -298,6 +298,7 @@ func bedrockPrepareTools(
     var preparedToolChoice = toolChoice
     let forcedToolName = bedrockForcedToolName(from: toolChoice)
     let rejectsForcedToolUse = anthropicModelCapabilities(modelID).rejectsForcedToolUse
+    let disableParallel = disableParallelToolUse ?? (isAnthropicModel && forcedToolName != nil && !rejectsForcedToolUse)
     let forcedToolChoiceType = toolChoice?.stringValue ?? toolChoice?["type"]?.stringValue
     if rejectsForcedToolUse, forcedToolChoiceType == "tool" || forcedToolChoiceType == "required" {
         let detail = forcedToolChoiceType == "tool"
@@ -312,7 +313,7 @@ func bedrockPrepareTools(
     }
 
     for (name, schema) in tools {
-        if let forcedToolName, forcedToolName != name {
+        if let forcedToolName, (!isAnthropicModel || rejectsForcedToolUse), forcedToolName != name {
             continue
         }
         if schema["type"]?.stringValue == "provider" {
@@ -391,14 +392,14 @@ func bedrockPrepareTools(
     if usesAnthropicProviderTools,
        let anthropicChoice = anthropicToolChoice(
            from: preparedToolChoice,
-           disableParallelToolUse: disableParallelToolUse
+           disableParallelToolUse: disableParallel
        ).value {
         additionalModelRequestFields = ["tool_choice": anthropicChoice]
     }
     let preparedToolChoiceType = preparedToolChoice?.stringValue ?? preparedToolChoice?["type"]?.stringValue
     if isAnthropicModel,
        !usesAnthropicProviderTools,
-       disableParallelToolUse,
+       disableParallel,
        preparedToolChoiceType != "none" {
         var anthropicToolChoice: [String: JSONValue]
         switch preparedToolChoiceType {
@@ -477,22 +478,21 @@ func bedrockStrictToolSchemaCompatible(_ schema: JSONValue) -> Bool {
 }
 
 func bedrockSupportsStrictToolSpec(modelID: String) -> Bool {
-    !modelID.contains("claude-")
-        || modelID.range(of: #"claude-(?:instant|v?2|3)(?=[-.:]|$)"#, options: .regularExpression) != nil
-        || bedrockAnthropicStrictToolPatterns.contains { modelID.range(of: $0, options: .regularExpression) != nil }
+    bedrockStructuredOutputSupport(modelID).strict
 }
 
 func bedrockSupportsNativeStructuredOutput(modelID: String) -> Bool {
-    bedrockSupportsStrictToolSpec(modelID: modelID)
-        && modelID.range(of: #"claude-(?:sonnet-4-6|haiku-4-5)(?=[-.:]|$)"#, options: .regularExpression) == nil
+    bedrockStructuredOutputSupport(modelID).native
 }
 
-private let bedrockAnthropicStrictToolPatterns = [
-    #"claude-(?:opus|sonnet)-4(?:-\d{8})?(?:-v\d+)?(?=[:.]|$)"#,
-    #"claude-opus-4-(?:1|5|6)(?=[-.:]|$)"#,
-    #"claude-sonnet-4-(?:5|6)(?=[-.:]|$)"#,
-    #"claude-haiku-4-5(?=[-.:]|$)"#
-]
+private func bedrockStructuredOutputSupport(_ modelID: String) -> (strict: Bool, native: Bool) {
+    if !modelID.contains("claude-") || modelID.range(of: #"claude-(?:instant|v?2|3)(?=[-.:]|$)"#, options: .regularExpression) != nil { return (true, true) }
+    let pattern = #"claude-[a-z]+-4-\d{1,2}(?=[-.:]|$)|claude-[a-z]+-\d+(?:-\d{1,2})?(?:-\d{8})?(?:-v\d+)?(?=[:.]|$)"#
+    guard let range = modelID.range(of: pattern, options: .regularExpression) else { return (false, false) }
+    let alias = String(modelID[range]).replacingOccurrences(of: #"-\d{8}(?:-v\d+)?$|-v\d+$"#, with: "", options: .regularExpression)
+    let native: Set<String> = ["claude-opus-4", "claude-sonnet-4", "claude-opus-4-1", "claude-opus-4-5", "claude-sonnet-4-5", "claude-opus-4-6", "claude-opus-5", "claude-sonnet-5", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+    return (native.contains(alias) || ["claude-haiku-4-5", "claude-sonnet-4-6"].contains(alias), native.contains(alias))
+}
 
 func bedrockSanitizeToolName(_ name: String) -> String {
     let sanitized = name.replacingOccurrences(

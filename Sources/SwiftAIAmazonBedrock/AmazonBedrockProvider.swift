@@ -8,7 +8,7 @@ import SwiftAITransport
 import SwiftAIProviderUtilities
 
 
-private let amazonBedrockUserAgent = "ai-sdk-amazon-bedrock/5.0.130"
+private let amazonBedrockUserAgent = "ai-sdk-amazon-bedrock/5.0.135"
 
 public struct AmazonBedrockCredentials: Sendable {
     public var accessKeyID: String
