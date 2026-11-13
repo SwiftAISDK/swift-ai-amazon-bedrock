@@ -3,13 +3,13 @@
   "packages": [
     {
       "name": "@ai-sdk/amazon-bedrock",
-      "reviewedVersion": "5.0.135",
+      "reviewedVersion": "5.0.141",
       "ledgerKind": "provider",
-      "evidence": "`AIProviders.amazonBedrock`, `AIProviders.amazonBedrockAnthropic`, `AIProviders.bedrockMantle`, `AmazonBedrockModels.swift`, `AmazonBedrockTests.swift`, `AnthropicBedrockUpstream202609Tests.swift`; 2026-11-01 delta: Docs/WeeklyUpstreamAudit20261101.json; 2026-11-08 delta: Docs/WeeklyUpstreamAudit20261108.json",
+      "evidence": "`AIProviders.amazonBedrock`, `AIProviders.amazonBedrockAnthropic`, `AIProviders.bedrockMantle`, `AmazonBedrockModels.swift`, `AmazonBedrockTests.swift`, `AnthropicBedrockUpstream202609Tests.swift`; 2026-11-01 delta: Docs/WeeklyUpstreamAudit20261101.json; 2026-11-08 delta: Docs/WeeklyUpstreamAudit20261108.json; 2026-11-14 delta: Docs/WeeklyUpstreamAudit20261114.json",
       "reviewStatus": "imported-reviewed-with-gaps",
-      "archiveIntegrity": "sha512-3iP20eXI5JaWJZCV/dKMBsAbhTtz+6rHpkm2KP6OF5tQqgpQkI/UldOpCmGDEUJuyAIHy40fA3RJEEdtUvqCrg==",
-      "sourceRef": "npm:@ai-sdk/amazon-bedrock@5.0.135",
-      "testRef": "0f3a85f92d1ce06ccde01d662407ef83e097a712",
+      "archiveIntegrity": "sha512-PB0K1fM/Ic4Xui7JpgJqwidMMATk0ZwktA32dm0SQMhdzdjvecUg8UmwK4+ZWcc5A2hLl37WSFLTM8dQ4GAZlg==",
+      "sourceRef": "npm:@ai-sdk/amazon-bedrock@5.0.141",
+      "testRef": "8bc7652cdb13fc84722666eb93f45acd0d131eee",
       "testRefRelationship": "matching-release",
       "contractFamilies": [
         "EmbeddingModelV4",
@@ -18,7 +18,7 @@
         "ProviderV4",
         "RerankingModelV4"
       ],
-      "contractReview": "2026-11-08: published declarations/source and exact matching-release changed tests reviewed; native implementations, per-file dispositions and broader retained gaps are recorded in Docs/WeeklyUpstreamAudit20261108.json. Reviewed delta is not full-package or live-service parity."
+      "contractReview": "2026-11-14: verified published source/declarations and exact matching-release changed tests reviewed separately; native ports, per-file dispositions and retained gaps are recorded in Docs/WeeklyUpstreamAudit20261114.json. Delta review is not full-package or live-service parity."
     }
   ]
 }
