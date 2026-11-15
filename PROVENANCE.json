@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "package": "swift-ai-amazon-bedrock",
-  "version": "1.1.2",
-  "releaseID": "weekly-upstream-20261114",
+  "version": "1.1.3",
+  "releaseID": "weekly-upstream-20261115",
   "source": {
-    "commit": "07fbf86b82d83d9724bd03622e9e87e74395286f",
-    "baseCommit": "07fbf86b82d83d9724bd03622e9e87e74395286f",
+    "commit": "1e543b35e0259a5bda888665dacf2d4a7f1bb0ed",
+    "baseCommit": "1e543b35e0259a5bda888665dacf2d4a7f1bb0ed",
     "workingTree": false,
-    "inputsSHA256": "63e472c0fe891cb7636d225e1c6467e4761dc3721be68081f2afa9f0b656bb29"
+    "inputsSHA256": "5508ffc6347bffaed13fb29409eb856df9a7796d3ebdcb6f623d1e8871b52999"
   },
   "dependencies": [
     {
@@ -29,22 +29,22 @@
   ],
   "changes": [
     {
-      "id": "weekly-upstream-20261114",
-      "notes": "Distinguish dated base Fable 5 from genuine 5.1/5.2 aliases, retaining the original hosted JSON-tool fallback and minor-model native-output controls. Recognize current Claude Fable 5.2 model IDs while preserving Bedrock strict/native-output limitations. Anthropic hosting uses the updated adaptive-thinking and forced-tool policy. Reviewed npm delta: @ai-sdk/amazon-bedrock 5.0.135 to 5.0.141. Validation: `node Scripts/test-packages.mjs` passed all 52 owning suites and 1731 facade tests; tooling 27/27, generation/isolation checks, standalone exports and 106 minimum/latest consumers, documentation check and 101-page build passed. Publication requires green exact-source Swift 6.3.3 CI. Paid/live verification and full-package parity are not claimed.",
-      "compatibility": "Compatible behavior/header correction. Original public selectors are preserved. npm baselines and Swift SemVer are independent; this reviewed delta does not establish full-package or live-service parity. Required direct minimums: swift-ai-anthropic 1.3.0 to 1.4.0."
+      "id": "weekly-upstream-20261115",
+      "notes": "Pass thinking block binding fields through the current Anthropic InvokeModel unary and streaming wire paths, matching removal of the upstream prefix_mismatch_behavior rename. Preserve the legacy directly callable transform helper for existing callers. Reviewed npm delta: @ai-sdk/amazon-bedrock 5.0.141 to 5.0.142. Validation passed: node Scripts/test-packages.mjs (55 owning packages, 2451 owning tests and 1736 compatibility tests), generation checks, 27 tooling tests, isolation/version checks, deterministic exports and minimum-dependency consumers. Documentation check/build passed (104 pages). Publication is gated by exact-source Swift 6.3.3 CI; subsequent public refs and clients are recorded in Docs/ReleaseVerification20261115.json. Paid/live-service checks were not run; this delta does not claim full-package parity.",
+      "compatibility": "Compatible wire-behavior correction. Existing provider and helper selectors remain; no dependency minimum change."
     }
   ],
   "canonicalDirectory": "Packages/swift-ai-amazon-bedrock",
   "upstream": [
     {
       "name": "@ai-sdk/amazon-bedrock",
-      "reviewedVersion": "5.0.141",
+      "reviewedVersion": "5.0.142",
       "ledgerKind": "provider",
-      "evidence": "`AIProviders.amazonBedrock`, `AIProviders.amazonBedrockAnthropic`, `AIProviders.bedrockMantle`, `AmazonBedrockModels.swift`, `AmazonBedrockTests.swift`, `AnthropicBedrockUpstream202609Tests.swift`; 2026-11-01 delta: Docs/WeeklyUpstreamAudit20261101.json; 2026-11-08 delta: Docs/WeeklyUpstreamAudit20261108.json; 2026-11-14 delta: Docs/WeeklyUpstreamAudit20261114.json",
+      "evidence": "`AIProviders.amazonBedrock`, `AIProviders.amazonBedrockAnthropic`, `AIProviders.bedrockMantle`, `AmazonBedrockModels.swift`, `AmazonBedrockTests.swift`, `AnthropicBedrockUpstream202609Tests.swift`; 2026-11-01 delta: Docs/WeeklyUpstreamAudit20261101.json; 2026-11-08 delta: Docs/WeeklyUpstreamAudit20261108.json; 2026-11-14 delta: Docs/WeeklyUpstreamAudit20261114.json; 2026-11-15 delta: Docs/WeeklyUpstreamAudit20261115.json",
       "reviewStatus": "imported-reviewed-with-gaps",
-      "archiveIntegrity": "sha512-PB0K1fM/Ic4Xui7JpgJqwidMMATk0ZwktA32dm0SQMhdzdjvecUg8UmwK4+ZWcc5A2hLl37WSFLTM8dQ4GAZlg==",
-      "sourceRef": "npm:@ai-sdk/amazon-bedrock@5.0.141",
-      "testRef": "8bc7652cdb13fc84722666eb93f45acd0d131eee",
+      "archiveIntegrity": "sha512-eOwZ14N8XmamP6hZPirRen+xS1F5563MIPBz8RiQiV/bbcxZvEepQKPe85QeKDm+NwiBVrCXEFS6dtB08vjjJQ==",
+      "sourceRef": "npm:@ai-sdk/amazon-bedrock@5.0.142",
+      "testRef": "0e8e0543aeda7d4dd4ce6eade0d5b7d5a43644c1",
       "testRefRelationship": "matching-release",
       "contractFamilies": [
         "EmbeddingModelV4",
@@ -53,7 +53,7 @@
         "ProviderV4",
         "RerankingModelV4"
       ],
-      "contractReview": "2026-11-14: verified published source/declarations and exact matching-release changed tests reviewed separately; native ports, per-file dispositions and retained gaps are recorded in Docs/WeeklyUpstreamAudit20261114.json. Delta review is not full-package or live-service parity."
+      "contractReview": "2026-11-15: published source/declarations and exact matching-release tests reviewed separately. Native delta scenarios, per-file dispositions, unchanged-catalog evidence and explicit remaining gaps are recorded in Docs/WeeklyUpstreamAudit20261115.json. Required checks remain a separate gate; no full-package/live-service parity claim."
     }
   ],
   "note": "Independent port. Imported test refs and contract review gaps retain their original status; export is not new upstream parity proof.",
@@ -72,7 +72,7 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Porting/map.json",
-      "sha256": "4e0e631aef0e80a34906fce2b35f93c5e7a1e36268e675ec3a0789aef1841027"
+      "sha256": "c2ff9f0a97bf29453f0473d7ae1659601069457d3e94ee89be9787ccc847e9bd"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/README.md",
@@ -80,7 +80,7 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockAnthropicLanguageModel.swift",
-      "sha256": "db8e093e2dd34f1674692c912a1e6dd4388b822f5c8c24c20f80cffd4264f8bb"
+      "sha256": "a4e969d00d2cdf5b1a884a1ecde8df05dcc682b6b5514b56bb383e235d614cd8"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockEmbeddingModel.swift",
@@ -104,7 +104,7 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockProvider.swift",
-      "sha256": "a044fa90425819c54085d64634ac062b282accc17b2c2fdc635dd01a85bba986"
+      "sha256": "e12899a2e50650e6a4506b63586f202675de154239413b0b1aedd3588abfc778"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockRerankingModel.swift",
@@ -132,7 +132,7 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockTests.swift",
-      "sha256": "9ab8244d2f0a8a9b7ba45951d2c8624362b73fd8483d64d40ee32f069af247c8"
+      "sha256": "69647cca336d38762e6782b297e6425e4767e025c4b63fb185c6046c0f5bf6bd"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockUpstream5068Tests.swift",
@@ -157,6 +157,10 @@
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/Weekly20261114FableTests.swift",
       "sha256": "fb6dae917585fb85176b81c1a081a1e59d695b8e75b62bd3f294589a865b3e56"
+    },
+    {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/Weekly20261115ThinkingBindingTests.swift",
+      "sha256": "04a1c0812a3159507e49d0115e936752150dadce92b5800c406b2116c4c010bd"
     }
   ]
 }

@@ -15,7 +15,7 @@ public final class AmazonBedrockAnthropicLanguageModel: LanguageModel, @unchecke
 
     public func generate(_ request: LanguageModelRequest) async throws -> TextGenerationResult {
         let prepared = try await preparedCall(for: request)
-        let body = amazonBedrockThinkingBindingBody(amazonBedrockAnthropicBody(prepared.body, betas: prepared.betas))
+        let body = amazonBedrockAnthropicBody(prepared.body, betas: prepared.betas)
         let response = try await config.sendJSONResponse(path: "/model/\(bedrockEncodeModelID(modelID))/invoke", body: .object(body), headers: request.headers, abortSignal: request.abortSignal)
         let raw = response.json
         try anthropicValidateFallbackContent(raw["content"], providerID: providerID)
@@ -52,7 +52,7 @@ public final class AmazonBedrockAnthropicLanguageModel: LanguageModel, @unchecke
             let task = Task {
                 do {
                     let prepared = try await preparedCall(for: request, stream: true)
-                    let body = amazonBedrockThinkingBindingBody(amazonBedrockAnthropicBody(prepared.body, betas: prepared.betas))
+                    let body = amazonBedrockAnthropicBody(prepared.body, betas: prepared.betas)
                     let httpRequest = try config.request(
                         path: "/model/\(bedrockEncodeModelID(modelID))/invoke-with-response-stream",
                         body: .object(body),
