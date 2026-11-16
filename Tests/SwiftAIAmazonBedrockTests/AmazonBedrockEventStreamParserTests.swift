@@ -243,56 +243,50 @@ import Testing
     })
 }
 
-@Test func amazonBedrockJSONResponseToolYieldsCanonicalDeltaBeforeBlockStop() async throws {
-    let firstFrames = amazonEventStreamResponse([
+// Upstream doStream: the JSON response tool emits no tool-input parts; its
+// accumulated input becomes one text block when the content block stops.
+@Test func amazonBedrockJSONResponseToolEmitsTextAtBlockStopLikeUpstream() async throws {
+    let transport = RecordingTransport(response: amazonEventStreamResponse([
         ("contentBlockStart", #"{"contentBlockIndex":0,"start":{"toolUse":{"toolUseId":"json-1","name":"json"}}}"#),
-        ("contentBlockDelta", #"{"contentBlockIndex":0,"delta":{"toolUse":{"input":"{\"name\":"}}}"#)
-    ]).body
-    let finalFrames = amazonEventStreamResponse([
+        ("contentBlockDelta", #"{"contentBlockIndex":0,"delta":{"toolUse":{"input":"{\"name\":"}}}"#),
         ("contentBlockDelta", #"{"contentBlockIndex":0,"delta":{"toolUse":{"input":"\"Test\"}"}}}"#),
         ("contentBlockStop", #"{"contentBlockIndex":0}"#),
         ("messageStop", #"{"stopReason":"tool_use"}"#),
         ("metadata", #"{"usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}"#)
-    ]).body
-    let transport = BedrockGatedStreamingTransport(firstChunk: firstFrames, finalChunk: finalFrames)
+    ]))
     let provider = try AIProviders.amazonBedrock(configuration: AmazonBedrockProviderSettings(
         region: "us-east-1",
         apiKey: "bedrock-key",
         transport: transport
     ))
     let model = try provider.languageModel("mistral.large")
-    let receivedDelta = AIDelayedPromise<String>()
-    let consumer = Task {
-        var parts: [LanguageStreamPart] = []
-        for try await part in model.stream(LanguageModelRequest(
-            messages: [.user("Return JSON")],
-            responseFormat: .json(schema: ["type": "object", "properties": ["name": ["type": "string"]]])
-        )) {
-            parts.append(part)
-            if case let .textDeltaPart(_, delta, _) = part, receivedDelta.isPending {
-                receivedDelta.resolve(delta)
-            }
-        }
-        return parts
+    var parts: [LanguageStreamPart] = []
+    for try await part in model.stream(LanguageModelRequest(
+        messages: [.user("Return JSON")],
+        responseFormat: .json(schema: ["type": "object", "properties": ["name": ["type": "string"]]])
+    )) {
+        parts.append(part)
     }
-    defer { transport.releaseBody.resolve(()) }
 
-    #expect(try await awaitBedrockTestSignal(receivedDelta) == #"{"name":"#)
-    #expect(transport.releaseBody.isPending)
-    transport.releaseBody.resolve(())
-    let parts = try await consumer.value
-    #expect(parts.contains(.textStart(id: "0")))
-    #expect(parts.contains(.textEnd(id: "0")))
-    #expect(parts.filter {
-        if case .finishMetadata = $0 { return true }
-        return false
-    }.count == 1)
-    #expect(parts.contains {
-        if case let .finishMetadata(reason, usage, _) = $0 {
-            return reason == "stop" && usage?.totalTokens == 2
+    let contentParts = parts.filter {
+        switch $0 {
+        case .textStart, .textDeltaPart, .textEnd, .toolInputStart, .toolInputDelta, .toolInputEnd, .toolCall: return true
+        default: return false
         }
-        return false
-    })
+    }
+    #expect(contentParts == [
+        .textStart(id: "0"),
+        .textDeltaPart(id: "0", delta: #"{"name":"Test"}"#),
+        .textEnd(id: "0")
+    ])
+    let finish = parts.compactMap { part -> (String?, TokenUsage?, [String: JSONValue])? in
+        if case let .finishMetadata(reason, usage, metadata) = part { return (reason, usage, metadata) }
+        return nil
+    }
+    #expect(finish.count == 1)
+    #expect(finish.first?.0 == "stop")
+    #expect(finish.first?.1?.totalTokens == 2)
+    #expect(finish.first?.2["amazonBedrock"] == ["isJsonResponseFromTool": true, "stopSequence": .null])
 }
 
 @Test func amazonBedrockAnthropicYieldsDeltaBeforeEventStreamEOF() async throws {

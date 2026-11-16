@@ -184,15 +184,16 @@ func bedrockEmbeddingProviderOptions(extraBody: [String: JSONValue], providerOpt
     if let amazonBedrock = extraBody["amazonBedrock"]?.objectValue {
         output.merge(amazonBedrock) { _, new in new }
     }
-    if let bedrock = providerOptions["bedrock"] {
-        guard let object = bedrock.objectValue else {
-            throw AIError.invalidArgument(argument: "providerOptions.bedrock", message: "Bedrock provider options must be an object.")
-        }
-        output.merge(object) { _, new in new }
-    }
+    // Upstream parses `amazonBedrock` and only falls back to the legacy
+    // `bedrock` namespace when the preferred one is absent.
     if let amazonBedrock = providerOptions["amazonBedrock"] {
         guard let object = amazonBedrock.objectValue else {
             throw AIError.invalidArgument(argument: "providerOptions.amazonBedrock", message: "Amazon Bedrock provider options must be an object.")
+        }
+        output.merge(object) { _, new in new }
+    } else if let bedrock = providerOptions["bedrock"] {
+        guard let object = bedrock.objectValue else {
+            throw AIError.invalidArgument(argument: "providerOptions.bedrock", message: "Bedrock provider options must be an object.")
         }
         output.merge(object) { _, new in new }
     }

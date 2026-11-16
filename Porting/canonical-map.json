@@ -57,6 +57,7 @@
     "tests": [
       "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockEventStreamParserTests.swift",
       "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockMediaAndRerankingTests.swift",
+      "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockParityAuditTests.swift",
       "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockTests.swift",
       "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockUpstream5068Tests.swift",
       "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/FixtureDownloadTransport.swift",

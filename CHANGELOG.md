@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.3
+## 1.2.0
 
-- Pass thinking block binding fields through the current Anthropic InvokeModel unary and streaming wire paths, matching removal of the upstream prefix_mismatch_behavior rename. Preserve the legacy directly callable transform helper for existing callers. Reviewed npm delta: @ai-sdk/amazon-bedrock 5.0.141 to 5.0.142. Validation passed: node Scripts/test-packages.mjs (55 owning packages, 2451 owning tests and 1736 compatibility tests), generation checks, 27 tooling tests, isolation/version checks, deterministic exports and minimum-dependency consumers. Documentation check/build passed (104 pages). Publication is gated by exact-source Swift 6.3.3 CI; subsequent public refs and clients are recorded in Docs/ReleaseVerification20261115.json. Paid/live-service checks were not run; this delta does not claim full-package parity.
-  Compatibility: Compatible wire-behavior correction. Existing provider and helper selectors remain; no dependency minimum change.
+- Usage includes cache tokens like upstream, provider and response metadata arrive on the finish part, `stopSequence` paths, `anthropicBeta` forwarding, message grouping, blank text blocks and the stream state machine match upstream. Function tools send only their input schema; `maxImagesPerCall` is public (Nova Canvas 5, others 1).
+  Compatibility: Source-compatible; changes are additive. Request bodies, results, warnings and errors change to match the reviewed upstream package.

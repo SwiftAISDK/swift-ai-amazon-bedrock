@@ -1,5 +1,5 @@
 <!-- Generated distribution; edit the canonical repository. -->
-# swift-ai-amazon-bedrock 1.1.3
+# swift-ai-amazon-bedrock 1.2.0
 
 Independent Swift-native port of Vercel AI SDK. Source and upstream dispositions are in PROVENANCE.json and Porting/.
 
@@ -8,7 +8,7 @@ Independent Swift-native port of Vercel AI SDK. Source and upstream dispositions
 Add this package to your SwiftPM dependencies:
 
 ```swift
-.package(url: "https://github.com/SwiftAISDK/swift-ai-amazon-bedrock.git", from: "1.1.3")
+.package(url: "https://github.com/SwiftAISDK/swift-ai-amazon-bedrock.git", from: "1.2.0")
 ```
 
 Products: `SwiftAIAmazonBedrock`.
@@ -16,25 +16,31 @@ Contribute and report issues in the canonical SwiftAISDK repository.
 
 ## Authored usage guide
 
-# SwiftAIAmazonBedrock
+# Amazon Bedrock for Swift
 
-Swift-native port of `@ai-sdk/amazon-bedrock`. Maintained in the canonical SwiftAISDK repository and exported as an independent Swift package.
-Sources are owned by the canonical repository, with shared HTTP/SigV4 machinery
-in core and Anthropic wire behavior in the Anthropic package.
+`SwiftAIAmazonBedrock` adds Amazon Bedrock, Amazon Bedrock (Anthropic models) and Amazon Bedrock Mantle to [SwiftAISDK](https://github.com/SwiftAISDK/SwiftAISDK), an independent Swift port of the Vercel AI SDK. It ports `@ai-sdk/amazon-bedrock` and supports text generation, embeddings, image generation and reranking.
 
-Existing baselines and documented port gaps remain unchanged. See the canonical
-provider guide and `Porting/map.json`.
+Provider guides with models, options, streaming and errors:
 
-See [provider usage and capabilities](https://github.com/SwiftAISDK/SwiftAISDK/blob/main/docs-site/scripts/provider-guides/amazon-bedrock.md) for authentication, options and supported surfaces.
+- [Amazon Bedrock](https://swiftaisdk.github.io/SwiftAISDK/providers/amazon-bedrock/)
+- [Amazon Bedrock (Anthropic models)](https://swiftaisdk.github.io/SwiftAISDK/providers/amazon-bedrock-anthropic/)
+- [Amazon Bedrock Mantle](https://swiftaisdk.github.io/SwiftAISDK/providers/bedrock-mantle/)
 
-The reviewed Claude 5/5.5 model families support native output schemas and strict
-tools where the Bedrock model catalog declares support. Native output is selected
-automatically only for schemas it can preserve. Explicit `structuredOutputMode`
-continues to select output-format or JSON-tool behavior. Unknown future Claude
-aliases retain conservative capability handling.
+## Usage
 
-A named tool choice on Anthropic models that support forced tool use keeps all
-function tools and disables parallel tool use by default. Explicit
-`disableParallelToolUse: false` opts out. Other model families receive only the
-named tool. Top-level image `seed: 0` is preserved. Foreign empty signature-text
-parts are omitted before final assistant-prefill trimming.
+Add the `SwiftAI` product from `swift-ai-core` and the `SwiftAIAmazonBedrock` product from this package to your target, then create the provider:
+
+```swift
+import SwiftAI
+import SwiftAIAmazonBedrock
+
+let provider = try AIProviders.amazonBedrock(configuration: AmazonBedrockProviderSettings())
+```
+
+By default the provider reads `AWS_BEARER_TOKEN_BEDROCK`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL_BEDROCK_RUNTIME`, `AWS_ENDPOINT_URL_BEDROCK_AGENT_RUNTIME` and `AWS_ENDPOINT_URL` from the environment; values set in `AmazonBedrockProviderSettings` take precedence.
+
+To use every provider through one dependency, add the complete [SwiftAISDK](https://github.com/SwiftAISDK/SwiftAISDK) package instead; see [Install](https://swiftaisdk.github.io/SwiftAISDK/getting-started/install/).
+
+## Contributing
+
+This package is exported from `Packages/swift-ai-amazon-bedrock` in the canonical [SwiftAISDK](https://github.com/SwiftAISDK/SwiftAISDK) repository. Open issues and pull requests there.

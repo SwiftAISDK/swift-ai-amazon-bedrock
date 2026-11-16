@@ -2,6 +2,7 @@
   {
     "order": 1,
     "providerID": "amazon-bedrock",
+    "displayName": "Amazon Bedrock",
     "upstreamPackage": "@ai-sdk/amazon-bedrock",
     "factoryNames": [
       "AIProviders.amazonBedrock"
@@ -14,11 +15,50 @@
     ],
     "files": false,
     "skills": false,
-    "notes": "Amazon Bedrock Converse, embeddings, images, and reranking mirror upstream 5.0.142: SigV4 and bearer auth, versioned user-agent suffix, Converse request/stream parsing, ordered generated content with signature, legacy redacted-data, and current redacted-content replay metadata, event-stream decode/process failure propagation and incomplete-frame EOF rejection, empty tool-call ID normalization, provider options under `amazonBedrock`/`bedrock`, service tiers, guardrails, top-level reasoning mapping, cache points, Converse inline and S3 video sources across ten supported MIME types, document citations, rich tool-result content, strict-tool warnings and JSON response fallback that preserves ordinary tools, Cohere batch embeddings up to 96 inputs, Nova/Titan/Cohere embedding response shapes, and the current `bedrockRerankingConfiguration` rerank request key. The latest pass omits assistant turns left empty after unsigned-reasoning filtering, and also preserves exact case-sensitive `s3://` image sources in user and tool-result content, sanitizes replayed tool names, percent-encodes ARN model paths, and omits strict/native structured-output fields for Claude families that Bedrock rejects. The 5.0.68 pass also adds inference-profile reasoning, cache-only assistant omission, ARN embedding-family detection, citations, parallel-tool disabling, guardrail block handling, complete raw usage, model-specific reasoning shapes, and typed stream errors. ProviderV4 type names, ESM-only packaging, Node 22 engines, optional JS headers config, and workflow serialization helpers are JS-only upstream concerns. The 5.0.76 delta adds `structuredOutputMode`, separate native-output and strict-tool model gates including Claude Sonnet 4.6 and Haiku 4.5, sibling-safe `output_config` filtering, citation-nested text extraction, sanitized document names, and alternating user turns for replayed provider-executed tool results. The 2026-09-20 pass adds opaque Anthropic-family settings, recursive strict-schema validation, current web-tool warnings/bindings, and non-2xx stream error parity. The 2026-09-27 pass adds current model capability gates, forced-tool and sampling rules, reasoning normalization, Claude Opus 5.5 and Mistral ID handling, and Mantle routing; Swift still cannot distinguish omitted from explicitly empty `stopSequences`. The 2026-10-04 pass passes string requestMetadata, omits Nova 2 Lite maxTokens for high thinking, validates generated region hosts, and reports Nova Canvas image-input capabilities. The 2026-10-11 pass: Claude Haiku 5.5 capability gates, explicit disabled thinking, max reasoning and embedding dimensions follow the published baseline. SigV4 omits non-ASCII header values from the signed set while retaining outgoing headers. The 2026-10-18 pass: Recognizable supported Claude generations receive strict/native-output fields; unknown Claude IDs use conservative prompt JSON instructions in automatic mode. Non-Claude and opaque inference profiles retain their prior behavior. The 2026-11-01 reviewed delta adds native per-request async credentials and current portable request/stream fixes where applicable; see WeeklyUpstreamAudit20261101 for exact package dispositions and retained gaps. The 2026-11-08 reviewed delta and retained gaps are documented in WeeklyUpstreamAudit20261108; no full-package or live-service parity is implied. The 2026-11-14 reviewed delta and retained gaps are documented in WeeklyUpstreamAudit20261114; no full-package or live-service parity is implied. The 2026-11-15 delta and native/platform distinctions are recorded in WeeklyUpstreamAudit20261115; no full-package or live-service parity is implied."
+    "credentials": [
+      {
+        "env": "AWS_BEARER_TOKEN_BEDROCK",
+        "description": "Bedrock API key used as a bearer token. Takes precedence over SigV4 credentials, including a `credentialProvider`."
+      },
+      {
+        "env": "AWS_ACCESS_KEY_ID",
+        "description": "Access key for SigV4 signing when no bearer token or credential provider is configured."
+      },
+      {
+        "env": "AWS_SECRET_ACCESS_KEY",
+        "description": "Secret key for SigV4 signing when no bearer token or credential provider is configured."
+      },
+      {
+        "env": "AWS_SESSION_TOKEN",
+        "description": "Optional session token for temporary credentials. Not read when both access keys are set in settings."
+      },
+      {
+        "env": "AWS_REGION",
+        "description": "AWS region. Defaults to `us-east-1` when neither this, `AWS_DEFAULT_REGION` nor `region` is set."
+      },
+      {
+        "env": "AWS_DEFAULT_REGION",
+        "description": "Fallback region, read when `AWS_REGION` is not set."
+      },
+      {
+        "env": "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+        "description": "Optional endpoint override for Converse, embedding and image requests."
+      },
+      {
+        "env": "AWS_ENDPOINT_URL_BEDROCK_AGENT_RUNTIME",
+        "description": "Optional endpoint override for reranking requests."
+      },
+      {
+        "env": "AWS_ENDPOINT_URL",
+        "description": "Optional endpoint override for all Bedrock services when no service-specific URL is set."
+      }
+    ],
+    "notes": "Foundation models on Amazon Bedrock through the Converse API, plus Titan, Cohere and Nova embeddings, Nova Canvas images and Bedrock reranking. Authenticate with a Bedrock API key or AWS SigV4 credentials; the AWS SDK credential chain is not used, so supply credentials through settings, a credential provider closure or environment variables."
   },
   {
     "order": 2,
     "providerID": "amazon-bedrock.anthropic",
+    "displayName": "Amazon Bedrock (Anthropic models)",
     "upstreamPackage": "@ai-sdk/amazon-bedrock",
     "factoryNames": [
       "AIProviders.amazonBedrockAnthropic"
@@ -28,11 +68,46 @@
     ],
     "files": false,
     "skills": false,
-    "notes": "Bedrock Anthropic mirrors upstream 5.0.142 invoke-model behavior: Anthropic Messages request conversion, Bedrock auth and user-agent handling, URL/data media resolution, native Anthropic tool helpers, model-specific structured-output and strict-tool omissions, event-stream decoding that surfaces decode/process failures and rejects incomplete frames at EOF, response metadata, and Bedrock-specific request URLs. JS fetch/header injection hooks remain JS-only. The 5.0.76 pass shares the new structured-output mode selection, model capability gates, document sanitization, citation extraction, and provider-executed tool-result replay. The 2026-09-27 pass inherits current Claude capability, tool-choice, sampling, and reasoning gates. The 2026-10-18 pass: The shared Messages implementation carries attached citations, separates retrieved web sources, and preserves tools under none/manual-thinking tool choices. The 2026-11-01 reviewed delta adds native per-request async credentials and current portable request/stream fixes where applicable; see WeeklyUpstreamAudit20261101 for exact package dispositions and retained gaps. The 2026-11-08 reviewed delta and retained gaps are documented in WeeklyUpstreamAudit20261108; no full-package or live-service parity is implied. The 2026-11-14 reviewed delta and retained gaps are documented in WeeklyUpstreamAudit20261114; no full-package or live-service parity is implied. The 2026-11-15 delta and native/platform distinctions are recorded in WeeklyUpstreamAudit20261115; no full-package or live-service parity is implied."
+    "credentials": [
+      {
+        "env": "AWS_BEARER_TOKEN_BEDROCK",
+        "description": "Bedrock API key used as a bearer token. Takes precedence over SigV4 credentials, including a `credentialProvider`."
+      },
+      {
+        "env": "AWS_ACCESS_KEY_ID",
+        "description": "Access key for SigV4 signing when no bearer token or credential provider is configured."
+      },
+      {
+        "env": "AWS_SECRET_ACCESS_KEY",
+        "description": "Secret key for SigV4 signing when no bearer token or credential provider is configured."
+      },
+      {
+        "env": "AWS_SESSION_TOKEN",
+        "description": "Optional session token for temporary credentials."
+      },
+      {
+        "env": "AWS_REGION",
+        "description": "AWS region. Defaults to `us-east-1` when neither this, `AWS_DEFAULT_REGION` nor `region` is set."
+      },
+      {
+        "env": "AWS_DEFAULT_REGION",
+        "description": "Fallback region, read when `AWS_REGION` is not set."
+      },
+      {
+        "env": "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+        "description": "Optional Bedrock Runtime endpoint override."
+      },
+      {
+        "env": "AWS_ENDPOINT_URL",
+        "description": "Optional endpoint override used when no service-specific URL is set."
+      }
+    ],
+    "notes": "Claude models on Amazon Bedrock called through InvokeModel in Anthropic's native Messages format, so Anthropic provider options and tool definitions carry over. It shares settings and authentication with the Amazon Bedrock provider."
   },
   {
     "order": 3,
     "providerID": "bedrock-mantle",
+    "displayName": "Amazon Bedrock Mantle",
     "upstreamPackage": "@ai-sdk/amazon-bedrock",
     "factoryNames": [
       "AIProviders.bedrockMantle"
@@ -42,6 +117,32 @@
     ],
     "files": false,
     "skills": false,
-    "notes": "Bedrock Mantle mirrors upstream 5.0.142 chat and responses surfaces with Bedrock Mantle hostnames, SigV4 or bearer auth, OpenAI-compatible request builders, versioned user-agent suffix, and provider metadata. JavaScript module-format exports are not applicable in Swift. The 2026-09-27 pass aligns model-family routing and current Responses behavior. The 2026-11-01 reviewed delta adds native per-request async credentials and current portable request/stream fixes where applicable; see WeeklyUpstreamAudit20261101 for exact package dispositions and retained gaps. The 2026-11-08 reviewed delta and retained gaps are documented in WeeklyUpstreamAudit20261108; no full-package or live-service parity is implied. The 2026-11-14 reviewed delta and retained gaps are documented in WeeklyUpstreamAudit20261114; no full-package or live-service parity is implied. The 2026-11-15 delta and native/platform distinctions are recorded in WeeklyUpstreamAudit20261115; no full-package or live-service parity is implied."
+    "credentials": [
+      {
+        "env": "AWS_BEARER_TOKEN_BEDROCK",
+        "description": "Bedrock API key used as a bearer token. Takes precedence over SigV4 credentials, including a `credentialProvider`."
+      },
+      {
+        "env": "AWS_ACCESS_KEY_ID",
+        "description": "Access key for SigV4 signing when no bearer token or credential provider is configured."
+      },
+      {
+        "env": "AWS_SECRET_ACCESS_KEY",
+        "description": "Secret key for SigV4 signing when no bearer token or credential provider is configured."
+      },
+      {
+        "env": "AWS_SESSION_TOKEN",
+        "description": "Optional session token for temporary credentials."
+      },
+      {
+        "env": "AWS_REGION",
+        "description": "AWS region used in the `bedrock-mantle.<region>.api.aws` host. Defaults to `us-east-1`."
+      },
+      {
+        "env": "AWS_DEFAULT_REGION",
+        "description": "Fallback region, read when `AWS_REGION` is not set."
+      }
+    ],
+    "notes": "OpenAI-compatible Chat Completions and Responses endpoints on Amazon Bedrock Mantle, authenticated with a Bedrock API key or SigV4 credentials. The endpoint path is chosen from the model ID."
   }
 ]

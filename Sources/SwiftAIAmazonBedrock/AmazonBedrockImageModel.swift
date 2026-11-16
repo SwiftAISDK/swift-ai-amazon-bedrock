@@ -80,7 +80,8 @@ public final class AmazonBedrockImageModel: ImageModel, @unchecked Sendable {
         )
     }
 
-    private var maxImagesPerCall: Int {
+    /// Upstream catalog: Nova Canvas accepts 5 images per call, other models 1.
+    public var maxImagesPerCall: Int {
         modelID == "amazon.nova-canvas-v1:0" ? 5 : 1
     }
 
@@ -210,15 +211,16 @@ func bedrockImageProviderOptions(extraBody: [String: JSONValue], providerOptions
     if let amazonBedrock = extraBody["amazonBedrock"]?.objectValue {
         output.merge(amazonBedrock) { _, new in new }
     }
-    if let bedrock = providerOptions["bedrock"] {
-        guard let object = bedrock.objectValue else {
-            throw AIError.invalidArgument(argument: "providerOptions.bedrock", message: "Bedrock provider options must be an object.")
-        }
-        output.merge(object) { _, new in new }
-    }
+    // Upstream parses `amazonBedrock` and only falls back to the legacy
+    // `bedrock` namespace when the preferred one is absent.
     if let amazonBedrock = providerOptions["amazonBedrock"] {
         guard let object = amazonBedrock.objectValue else {
             throw AIError.invalidArgument(argument: "providerOptions.amazonBedrock", message: "Amazon Bedrock provider options must be an object.")
+        }
+        output.merge(object) { _, new in new }
+    } else if let bedrock = providerOptions["bedrock"] {
+        guard let object = bedrock.objectValue else {
+            throw AIError.invalidArgument(argument: "providerOptions.bedrock", message: "Bedrock provider options must be an object.")
         }
         output.merge(object) { _, new in new }
     }

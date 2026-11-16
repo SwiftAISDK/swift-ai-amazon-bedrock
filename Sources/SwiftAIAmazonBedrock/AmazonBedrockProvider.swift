@@ -413,12 +413,15 @@ private final class BedrockSigningTransport: AIStreamingTransport, @unchecked Se
     }
 }
 
-func bedrockHTTPStatusError(provider: String, response: AIHTTPResponse) -> AIError {
+/// `includeType` mirrors upstream `amazonBedrockFailedResponseHandler`
+/// (`type: message`); Converse `doGenerate` and the Anthropic Messages
+/// sub-provider report the provider message alone.
+func bedrockHTTPStatusError(provider: String, includeType: Bool = true, response: AIHTTPResponse) -> AIError {
     guard let raw = try? response.jsonValue(),
           let message = raw["message"]?.stringValue else {
         return apiCallError(provider: provider, response: response)
     }
-    let body = raw["type"]?.stringValue.map { "\($0): \(message)" } ?? message
+    let body = includeType ? (raw["type"]?.stringValue.map { "\($0): \(message)" } ?? message) : message
     return apiCallError(
         provider: provider,
         statusCode: response.statusCode,
@@ -441,10 +444,10 @@ struct BedrockRuntimeConfig: @unchecked Sendable {
         try await sendJSONResponse(path: path, body: body, headers: requestHeaders, abortSignal: abortSignal).json
     }
 
-    func sendJSONResponse(path: String, body: JSONValue, headers requestHeaders: [String: String] = [:], abortSignal: AIAbortSignal? = nil) async throws -> (json: JSONValue, response: AIHTTPResponse) {
+    func sendJSONResponse(path: String, body: JSONValue, headers requestHeaders: [String: String] = [:], abortSignal: AIAbortSignal? = nil, errorIncludesType: Bool = true) async throws -> (json: JSONValue, response: AIHTTPResponse) {
         let response = try await sendRequest(try request(path: path, body: body, headers: requestHeaders, abortSignal: abortSignal))
         guard (200..<300).contains(response.statusCode) else {
-            throw bedrockHTTPStatusError(provider: providerID, response: response)
+            throw bedrockHTTPStatusError(provider: providerID, includeType: errorIncludesType, response: response)
         }
         return (try response.jsonValue(), response)
     }

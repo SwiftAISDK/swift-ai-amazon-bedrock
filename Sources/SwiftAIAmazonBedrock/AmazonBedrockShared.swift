@@ -136,7 +136,46 @@ struct BedrockPreparedTools {
     var toolConfig: JSONValue?
     var additionalModelRequestFields: [String: JSONValue]? = nil
     var warnings: [AIWarning]
+    var betas: [String] = []
 }
+
+/// Betas that upstream `prepareTools` from `@ai-sdk/anthropic` adds for
+/// Anthropic provider tools; Bedrock sends them as `anthropic_beta`.
+let bedrockAnthropicProviderToolBetas: [String: String] = [
+    "anthropic.code_execution_20250522": "code-execution-2025-05-22",
+    "anthropic.code_execution_20250825": "code-execution-2025-08-25",
+    "anthropic.computer_20250124": "computer-use-2025-01-24",
+    "anthropic.computer_20251124": "computer-use-2025-11-24",
+    "anthropic.computer_20241022": "computer-use-2024-10-22",
+    "anthropic.text_editor_20250124": "computer-use-2025-01-24",
+    "anthropic.text_editor_20241022": "computer-use-2024-10-22",
+    "anthropic.text_editor_20250429": "computer-use-2025-01-24",
+    "anthropic.bash_20250124": "computer-use-2025-01-24",
+    "anthropic.bash_20241022": "computer-use-2024-10-22",
+    "anthropic.memory_20250818": "context-management-2025-06-27",
+    "anthropic.web_fetch_20250910": "web-fetch-2025-09-10",
+    "anthropic.web_fetch_20260209": "code-execution-web-tools-2026-02-09",
+    "anthropic.web_search_20260209": "code-execution-web-tools-2026-02-09",
+    "anthropic.advisor_20260301": "advisor-tool-2026-03-01"
+]
+
+/// Input schemas of upstream Anthropic tool factories, as produced by
+/// `asSchema(tool.inputSchema).jsonSchema` for the Bedrock `toolSpec`.
+private let bedrockBashToolInputSchema: JSONValue = .object([
+    "$schema": .string("http://json-schema.org/draft-07/schema#"),
+    "type": .string("object"),
+    "properties": .object([
+        "command": .object(["type": .string("string")]),
+        "restart": .object(["type": .string("boolean")])
+    ]),
+    "required": .array([.string("command")]),
+    "additionalProperties": .bool(false)
+])
+
+let bedrockAnthropicProviderToolInputSchemas: [String: JSONValue] = [
+    "anthropic.bash_20241022": bedrockBashToolInputSchema,
+    "anthropic.bash_20250124": bedrockBashToolInputSchema
+]
 
 func bedrockRequestProviderOptions(providerOptions: [String: JSONValue], extraBody: [String: JSONValue]) throws -> [String: JSONValue] {
     var output: [String: JSONValue] = [:]
@@ -146,15 +185,16 @@ func bedrockRequestProviderOptions(providerOptions: [String: JSONValue], extraBo
     if let amazonBedrock = extraBody["amazonBedrock"]?.objectValue {
         output.merge(amazonBedrock) { _, new in new }
     }
-    if let bedrock = providerOptions["bedrock"] {
-        guard let object = bedrock.objectValue else {
-            throw AIError.invalidArgument(argument: "providerOptions.bedrock", message: "Bedrock provider options must be an object.")
-        }
-        output.merge(object) { _, new in new }
-    }
+    // Upstream resolves the first present namespace (`amazonBedrock`, then the
+    // legacy `bedrock`) instead of merging both.
     if let amazonBedrock = providerOptions["amazonBedrock"] {
         guard let object = amazonBedrock.objectValue else {
             throw AIError.invalidArgument(argument: "providerOptions.amazonBedrock", message: "Amazon Bedrock provider options must be an object.")
+        }
+        output.merge(object) { _, new in new }
+    } else if let bedrock = providerOptions["bedrock"] {
+        guard let object = bedrock.objectValue else {
+            throw AIError.invalidArgument(argument: "providerOptions.bedrock", message: "Bedrock provider options must be an object.")
         }
         output.merge(object) { _, new in new }
     }
@@ -187,27 +227,9 @@ func bedrockReasoningConfigEnabled(_ value: JSONValue?) -> Bool {
     return type == "enabled" || type == "adaptive" || type == "between_tools"
 }
 
-func bedrockApplyRequestProviderOptions(_ providerOptions: [String: JSONValue], to body: inout [String: JSONValue]) {
-    if let requestMetadata = providerOptions["requestMetadata"] { body["requestMetadata"] = requestMetadata }
-    if let guardrailConfig = providerOptions["guardrailConfig"] {
-        body["guardrailConfig"] = guardrailConfig
-    }
-    if let additionalModelRequestFields = providerOptions["additionalModelRequestFields"] {
-        body["additionalModelRequestFields"] = additionalModelRequestFields
-    }
-    if let serviceTier = providerOptions["serviceTier"] {
-        if let serviceTierType = serviceTier.stringValue {
-            body["serviceTier"] = .object(["type": .string(serviceTierType)])
-        } else {
-            body["serviceTier"] = serviceTier
-        }
-    }
-}
-
 func bedrockCachePoint(from providerMetadata: [String: JSONValue]) -> JSONValue? {
-    let cachePoint = providerMetadata["amazonBedrock"]?["cachePoint"]
-        ?? providerMetadata["bedrock"]?["cachePoint"]
-        ?? providerMetadata["cachePoint"]
+    let cachePoint = bedrockNonNull(providerMetadata["amazonBedrock"]?["cachePoint"])
+        ?? bedrockNonNull(providerMetadata["bedrock"]?["cachePoint"])
     guard let cachePoint else { return nil }
     return .object(["cachePoint": cachePoint])
 }
@@ -245,9 +267,8 @@ func bedrockGuardedImageBlock(_ imageBlock: JSONValue, providerMetadata: [String
 }
 
 func bedrockReasoningContentBlock(text: String, providerMetadata: [String: JSONValue]) -> JSONValue? {
-    let metadata = providerMetadata["amazonBedrock"]?.objectValue
-        ?? providerMetadata["bedrock"]?.objectValue
-        ?? providerMetadata
+    guard let metadata = providerMetadata["amazonBedrock"]?.objectValue
+        ?? providerMetadata["bedrock"]?.objectValue else { return nil }
     if let signature = metadata["signature"]?.stringValue {
         return .object([
             "reasoningContent": .object([
@@ -275,6 +296,33 @@ func bedrockReasoningContentBlock(text: String, providerMetadata: [String: JSONV
     return nil
 }
 
+let bedrockKnownAnthropicProviderToolIDs: Set<String> = [
+    "anthropic.advisor_20260301",
+    "anthropic.bash_20241022",
+    "anthropic.bash_20250124",
+    "anthropic.code_execution_20250522",
+    "anthropic.code_execution_20250825",
+    "anthropic.code_execution_20260120",
+    "anthropic.computer_20241022",
+    "anthropic.computer_20250124",
+    "anthropic.computer_20251124",
+    "anthropic.computer_toolset_20260801",
+    "anthropic.memory_20250818",
+    "anthropic.text_editor_20241022",
+    "anthropic.text_editor_20250124",
+    "anthropic.text_editor_20250429",
+    "anthropic.text_editor_20250728",
+    "anthropic.tool_search_bm25_20251119",
+    "anthropic.tool_search_regex_20251119",
+    "anthropic.web_fetch_20250910",
+    "anthropic.web_fetch_20260209",
+    "anthropic.web_fetch_20260318",
+    "anthropic.web_search_20250305",
+    "anthropic.web_search_20260209",
+    "anthropic.web_search_20260318"
+]
+
+/// Port of upstream `prepareTools` in `amazon-bedrock-prepare-tools.ts`.
 func bedrockPrepareTools(
     from tools: [String: JSONValue],
     toolChoice: JSONValue?,
@@ -287,148 +335,239 @@ func bedrockPrepareTools(
         return BedrockPreparedTools(toolConfig: nil, warnings: [])
     }
 
+    var warnings: [AIWarning] = []
+    var betas: [String] = []
+    // Request tools are a dictionary in Swift; sort for a deterministic order.
+    let supportedTools = tools.sorted { $0.key < $1.key }.filter { name, schema in
+        let id = schema["id"]?.stringValue ?? ""
+        let unsupportedWebTools: Set<String> = [
+            "anthropic.web_search_20250305",
+            "anthropic.web_search_20260318",
+            "anthropic.web_fetch_20260318"
+        ]
+        guard schema["type"]?.stringValue == "provider", unsupportedWebTools.contains(id) else { return true }
+        let feature = String(id.dropFirst("anthropic.".count))
+        warnings.append(AIWarning(
+            type: "unsupported",
+            feature: "\(feature) tool",
+            message: "The \(feature) tool is not supported on Amazon Bedrock."
+        ))
+        return false
+    }
+    guard !supportedTools.isEmpty else {
+        return BedrockPreparedTools(toolConfig: nil, warnings: warnings)
+    }
+
     let isAnthropicModel = bedrockIsAnthropicModel(
         modelID: modelID,
         modelFamily: modelFamily,
         reasoningConfig: reasoningConfig
     )
-    var warnings: [AIWarning] = []
-    var bedrockTools: [JSONValue] = []
-    var supportedTools: [String: JSONValue] = [:]
-    var preparedToolChoice = toolChoice
-    let forcedToolName = bedrockForcedToolName(from: toolChoice)
+    let providerTools = supportedTools.filter { $0.value["type"]?.stringValue == "provider" }
+    let functionTools = supportedTools.filter { $0.value["type"]?.stringValue != "provider" }
     let rejectsForcedToolUse = anthropicModelCapabilities(modelID).rejectsForcedToolUse
-    let disableParallel = disableParallelToolUse ?? (isAnthropicModel && forcedToolName != nil && !rejectsForcedToolUse)
-    let forcedToolChoiceType = toolChoice?.stringValue ?? toolChoice?["type"]?.stringValue
-    if rejectsForcedToolUse, forcedToolChoiceType == "tool" || forcedToolChoiceType == "required" {
-        let detail = forcedToolChoiceType == "tool"
-            ? "Only the '\(forcedToolName ?? "")' tool is sent with 'auto' tool choice. Instruct the model to use the tool in the prompt and verify that a tool call was made."
-            : "Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made."
-        warnings.append(AIWarning(
-            type: "unsupported",
-            feature: "toolChoice",
-            message: "toolChoice '\(forcedToolChoiceType ?? "")' is not supported by this model because it rejects forced tool use. \(detail)"
-        ))
-        preparedToolChoice = .object(["type": .string("auto")])
-    }
+    let choiceType = toolChoice?.stringValue ?? toolChoice?["type"]?.stringValue
+    let forcedToolName = bedrockForcedToolName(from: toolChoice)
+    let rejectsForcedToolChoice = isAnthropicModel && rejectsForcedToolUse
+        && (choiceType == "required" || choiceType == "tool")
+    let providerToolsForRequest = rejectsForcedToolChoice && choiceType == "tool"
+        ? providerTools.filter { $0.key == forcedToolName }
+        : providerTools
+    // A named tool choice keeps every function tool for Anthropic models, so
+    // parallel tool use is disabled by default to keep the response to it.
+    let disableParallelToolUseForRequest = disableParallelToolUse
+        ?? (isAnthropicModel && choiceType == "tool" && !rejectsForcedToolChoice ? true : nil)
 
-    for (name, schema) in tools {
-        if let forcedToolName, (!isAnthropicModel || rejectsForcedToolUse), forcedToolName != name {
-            continue
-        }
-        if schema["type"]?.stringValue == "provider" {
-            let id = schema["id"]?.stringValue ?? name
-            let unsupportedWebTools: Set<String> = [
-                "anthropic.web_search_20250305",
-                "anthropic.web_search_20260318",
-                "anthropic.web_fetch_20260318"
-            ]
-            if unsupportedWebTools.contains(id) {
-                let feature = String(id.dropFirst("anthropic.".count))
-                warnings.append(AIWarning(
-                    type: "unsupported",
-                    feature: "\(feature) tool",
-                    message: "The \(feature) tool is not supported on Amazon Bedrock."
-                ))
-                continue
+    var additionalModelRequestFields: [String: JSONValue]?
+    var bedrockTools: [JSONValue] = []
+    let usingAnthropicTools = isAnthropicModel && !providerToolsForRequest.isEmpty
+
+    if usingAnthropicTools {
+        for (_, tool) in providerTools {
+            let id = tool["id"]?.stringValue ?? ""
+            if let beta = bedrockAnthropicProviderToolBetas[id], !betas.contains(beta) {
+                betas.append(beta)
             }
-            if isAnthropicModel, let anthropicToolSchema = bedrockAnthropicProviderToolInputSchema(schema) {
+            if !bedrockKnownAnthropicProviderToolIDs.contains(id) {
+                warnings.append(AIWarning(type: "unsupported", feature: "provider-defined tool \(id)"))
+            }
+        }
+        if let anthropicChoice = bedrockAnthropicToolChoice(
+            choiceType: choiceType,
+            toolName: forcedToolName,
+            disableParallelToolUse: disableParallelToolUseForRequest,
+            rejectsForcedToolUse: rejectsForcedToolUse,
+            warnings: &warnings
+        ) {
+            additionalModelRequestFields = ["tool_choice": anthropicChoice]
+        }
+        for (name, tool) in providerToolsForRequest {
+            let id = tool["id"]?.stringValue ?? ""
+            if bedrockKnownAnthropicProviderToolIDs.contains(id),
+               let schema = bedrockAnthropicProviderToolInputSchema(tool) {
                 bedrockTools.append(.object([
                     "toolSpec": .object([
                         "name": .string(name),
-                        "inputSchema": .object(["json": anthropicToolSchema])
+                        "inputSchema": .object(["json": schema])
                     ])
                 ]))
-                supportedTools[name] = schema
             } else {
                 warnings.append(AIWarning(type: "unsupported", feature: "tool \(id)"))
             }
-            continue
         }
+    } else {
+        for (_, tool) in providerToolsForRequest {
+            warnings.append(AIWarning(type: "unsupported", feature: "tool \(tool["id"]?.stringValue ?? "")"))
+        }
+    }
 
+    var preparedChoiceType = choiceType
+    if !usingAnthropicTools && rejectsForcedToolChoice {
+        let detail = choiceType == "tool"
+            ? "toolChoice 'tool' is not supported by this model because it rejects forced tool use. Only the '\(forcedToolName ?? "")' tool is sent with 'auto' tool choice. Instruct the model to use the tool in the prompt and verify that a tool call was made."
+            : "toolChoice 'required' is not supported by this model because it rejects forced tool use. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made."
+        warnings.append(AIWarning(type: "unsupported", feature: "toolChoice", message: detail))
+        preparedChoiceType = "auto"
+    }
+
+    let filteredFunctionTools = choiceType == "tool" && (!isAnthropicModel || rejectsForcedToolChoice)
+        ? functionTools.filter { $0.key == forcedToolName }
+        : functionTools
+    let supportsStrictOnTools = bedrockSupportsStrictToolSpec(modelID: modelID)
+    for (name, schema) in filteredFunctionTools {
+        let strict = bedrockNonNull(schema["strict"])
+        let supportsStrictForTool = supportsStrictOnTools
+            && (strict?.boolValue != true || bedrockStrictToolSchemaCompatible(bedrockToolInputSchema(schema)))
+        if !supportsStrictOnTools, strict?.boolValue == true {
+            warnings.append(AIWarning(
+                type: "unsupported",
+                feature: "strict",
+                message: "Tool '\(name)' has strict: true, but strict mode is not supported by this model on Amazon Bedrock. The strict property will be ignored."
+            ))
+        } else if strict?.boolValue == true, !supportsStrictForTool {
+            warnings.append(AIWarning(
+                type: "unsupported",
+                feature: "strict",
+                message: "Tool '\(name)' has strict: true, but Amazon Bedrock requires every object in a strict tool schema to set additionalProperties: false. The strict property will be ignored."
+            ))
+        }
         var toolSpec: [String: JSONValue] = [
             "name": .string(name),
-            "inputSchema": .object(["json": schema])
+            "inputSchema": .object(["json": bedrockToolInputSchema(schema)])
         ]
+        // Upstream omits only descriptions that trim to an empty string.
         if let description = schema["description"]?.stringValue,
            !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             toolSpec["description"] = .string(description)
         }
-        if let strict = schema["strict"], strict != .null {
-            if !bedrockSupportsStrictToolSpec(modelID: modelID) {
-                if strict.boolValue == true {
-                    warnings.append(AIWarning(
-                        type: "unsupported",
-                        feature: "strict",
-                        message: "Tool '\(name)' has strict: true, but strict mode is not supported by this model on Amazon Bedrock. The strict property will be ignored."
-                    ))
-                }
-            } else if strict.boolValue == true, !bedrockStrictToolSchemaCompatible(schema) {
-                warnings.append(AIWarning(
-                    type: "unsupported",
-                    feature: "strict",
-                    message: "Tool '\(name)' has strict: true, but Amazon Bedrock requires every object in a strict tool schema to set additionalProperties: false. The strict property will be ignored."
-                ))
-            } else {
-                toolSpec["strict"] = strict
-            }
+        if let strict, supportsStrictForTool {
+            toolSpec["strict"] = strict
         }
         bedrockTools.append(.object(["toolSpec": .object(toolSpec)]))
-        supportedTools[name] = schema
     }
 
-    guard !bedrockTools.isEmpty else {
-        return BedrockPreparedTools(toolConfig: nil, warnings: warnings)
-    }
-
-    var toolConfig: [String: JSONValue] = ["tools": .array(bedrockTools)]
-    var additionalModelRequestFields: [String: JSONValue]?
-    let usesAnthropicProviderTools = bedrockUsesAnthropicProviderTools(
-        tools: supportedTools,
-        modelID: modelID,
-        modelFamily: modelFamily,
-        reasoningConfig: reasoningConfig
-    )
-    if usesAnthropicProviderTools,
-       let anthropicChoice = anthropicToolChoice(
-           from: preparedToolChoice,
-           disableParallelToolUse: disableParallel
-       ).value {
-        additionalModelRequestFields = ["tool_choice": anthropicChoice]
-    }
-    let preparedToolChoiceType = preparedToolChoice?.stringValue ?? preparedToolChoice?["type"]?.stringValue
     if isAnthropicModel,
-       !usesAnthropicProviderTools,
-       disableParallel,
-       preparedToolChoiceType != "none" {
-        var anthropicToolChoice: [String: JSONValue]
-        switch preparedToolChoiceType {
+       !usingAnthropicTools,
+       disableParallelToolUseForRequest == true,
+       !bedrockTools.isEmpty,
+       preparedChoiceType != "none" {
+        let anthropicChoice: [String: JSONValue]
+        switch preparedChoiceType {
         case "required":
-            anthropicToolChoice = ["type": .string("any")]
+            anthropicChoice = ["type": "any", "disable_parallel_tool_use": true]
         case "tool":
-            anthropicToolChoice = [
-                "type": .string("tool"),
-                "name": .string(bedrockForcedToolName(from: preparedToolChoice) ?? "")
-            ]
+            anthropicChoice = ["type": "tool", "name": .string(forcedToolName ?? ""), "disable_parallel_tool_use": true]
         default:
-            anthropicToolChoice = ["type": .string("auto")]
+            anthropicChoice = ["type": "auto", "disable_parallel_tool_use": true]
         }
-        anthropicToolChoice["disable_parallel_tool_use"] = .bool(true)
-        additionalModelRequestFields = ["tool_choice": .object(anthropicToolChoice)]
+        additionalModelRequestFields = ["tool_choice": .object(anthropicChoice)]
     }
-    if let choice = bedrockToolChoice(from: preparedToolChoice),
-       !usesAnthropicProviderTools,
-       additionalModelRequestFields == nil {
-        if choice == .null {
-            return BedrockPreparedTools(toolConfig: nil, warnings: warnings)
+
+    var bedrockToolChoice: JSONValue?
+    if !usingAnthropicTools,
+       additionalModelRequestFields?["tool_choice"] == nil,
+       !bedrockTools.isEmpty,
+       let preparedChoiceType {
+        switch preparedChoiceType {
+        case "auto":
+            bedrockToolChoice = .object(["auto": .object([:])])
+        case "required":
+            bedrockToolChoice = .object(["any": .object([:])])
+        case "none":
+            bedrockTools.removeAll()
+        case "tool":
+            bedrockToolChoice = .object(["tool": .object(["name": .string(forcedToolName ?? "")])])
+        default:
+            break
         }
-        toolConfig["toolChoice"] = choice
+    }
+
+    var toolConfig: JSONValue?
+    if !bedrockTools.isEmpty {
+        var config: [String: JSONValue] = ["tools": .array(bedrockTools)]
+        if let bedrockToolChoice { config["toolChoice"] = bedrockToolChoice }
+        toolConfig = .object(config)
     }
     return BedrockPreparedTools(
-        toolConfig: .object(toolConfig),
+        toolConfig: toolConfig,
         additionalModelRequestFields: additionalModelRequestFields,
-        warnings: warnings
+        warnings: warnings,
+        betas: usingAnthropicTools ? betas : []
     )
+}
+
+/// The Swift request carries description and strict next to the JSON schema;
+/// remove them before sending the schema itself.
+func bedrockToolInputSchema(_ tool: JSONValue) -> JSONValue {
+    if let inputSchema = bedrockNonNull(tool["inputSchema"]) { return inputSchema }
+    return aiFunctionToolInputSchema(tool)
+}
+
+/// Port of the tool-choice branch of upstream `@ai-sdk/anthropic` `prepareTools`.
+private func bedrockAnthropicToolChoice(
+    choiceType: String?,
+    toolName: String?,
+    disableParallelToolUse: Bool?,
+    rejectsForcedToolUse: Bool,
+    warnings: inout [AIWarning]
+) -> JSONValue? {
+    func choice(_ type: String, name: String? = nil) -> JSONValue {
+        var object: [String: JSONValue] = ["type": .string(type)]
+        if let name { object["name"] = .string(name) }
+        if let disableParallelToolUse { object["disable_parallel_tool_use"] = .bool(disableParallelToolUse) }
+        return .object(object)
+    }
+    guard let choiceType else {
+        return disableParallelToolUse == true ? choice("auto") : nil
+    }
+    switch choiceType {
+    case "auto":
+        return choice("auto")
+    case "required":
+        if rejectsForcedToolUse {
+            warnings.append(AIWarning(
+                type: "unsupported",
+                feature: "toolChoice",
+                message: "toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made."
+            ))
+            return choice("auto")
+        }
+        return choice("any")
+    case "none":
+        return .object(["type": .string("none")])
+    case "tool":
+        if rejectsForcedToolUse {
+            warnings.append(AIWarning(
+                type: "unsupported",
+                feature: "toolChoice",
+                message: "toolChoice 'tool' is not supported with this model or thinking configuration. Only the '\(toolName ?? "")' tool is sent with 'auto' tool choice. Instruct the model to use the tool in the prompt and verify that a tool call was made."
+            ))
+            return choice("auto")
+        }
+        return choice("tool", name: toolName)
+    default:
+        return nil
+    }
 }
 
 func bedrockStrictToolSchemaCompatible(_ schema: JSONValue) -> Bool {
@@ -542,54 +681,15 @@ func bedrockDocumentName(_ filename: String?, documentCounter: inout BedrockDocu
     return name
 }
 
-func bedrockUsesAnthropicProviderTools(
-    tools: [String: JSONValue],
-    modelID: String,
-    modelFamily: AmazonBedrockChatModelFamily? = nil,
-    reasoningConfig: JSONValue? = nil
-) -> Bool {
-    bedrockIsAnthropicModel(
-        modelID: modelID,
-        modelFamily: modelFamily,
-        reasoningConfig: reasoningConfig
-    ) && tools.values.contains { $0["type"]?.stringValue == "provider" }
-}
-
 func bedrockForcedToolName(from toolChoice: JSONValue?) -> String? {
     guard toolChoice?["type"]?.stringValue == "tool" else { return nil }
     return toolChoice?["toolName"]?.stringValue ?? toolChoice?["name"]?.stringValue
 }
 
-func bedrockToolChoice(from value: JSONValue?) -> JSONValue? {
-    guard let value else { return nil }
-    if let string = value.stringValue {
-        switch string {
-        case "auto":
-            return .object(["auto": .object([:])])
-        case "required":
-            return .object(["any": .object([:])])
-        case "none":
-            return .null
-        default:
-            return nil
-        }
-    }
-    switch value["type"]?.stringValue {
-    case "auto":
-        return .object(["auto": .object([:])])
-    case "required":
-        return .object(["any": .object([:])])
-    case "none":
-        return .null
-    case "tool":
-        guard let toolName = value["toolName"]?.stringValue ?? value["name"]?.stringValue else { return nil }
-        return .object(["tool": .object(["name": .string(toolName)])])
-    default:
-        return nil
-    }
-}
-
 func bedrockAnthropicProviderToolInputSchema(_ tool: JSONValue) -> JSONValue? {
+    if let id = tool["id"]?.stringValue, let schema = bedrockAnthropicProviderToolInputSchemas[id] {
+        return schema
+    }
     if let inputSchema = tool["inputSchema"] {
         return inputSchema
     }
@@ -599,24 +699,27 @@ func bedrockAnthropicProviderToolInputSchema(_ tool: JSONValue) -> JSONValue? {
     return .object(["type": .string("object"), "properties": .object([:])])
 }
 
+/// Applies the resolved reasoning configuration in upstream order: thinking
+/// fields, effort fields, the Nova 2 maxTokens rule, native structured output
+/// and finally the sampling settings that thinking rejects.
 func bedrockApplyReasoningConfig(
     _ value: JSONValue?,
     modelID: String,
     modelFamily: AmazonBedrockChatModelFamily? = nil,
     inferenceConfig: inout [String: JSONValue],
     providerOptions: inout [String: JSONValue],
-    warnings: inout [AIWarning]
+    warnings: inout [AIWarning],
+    nativeStructuredOutputSchema: JSONValue? = nil
 ) {
-    guard let value else { return }
-    guard let reasoningConfig = value.objectValue else {
+    let reasoningConfig = bedrockNonNull(value)?.objectValue
+    if bedrockNonNull(value) != nil, reasoningConfig == nil {
         warnings.append(AIWarning(type: "unsupported", feature: "reasoningConfig", message: "Bedrock reasoningConfig must be an object."))
-        return
     }
 
-    let type = reasoningConfig["type"]?.stringValue
-    let budgetTokens = reasoningConfig["budgetTokens"]?.intValue
-    let maxReasoningEffort = reasoningConfig["maxReasoningEffort"]?.stringValue
-    let display = reasoningConfig["display"]?.stringValue
+    let type = reasoningConfig?["type"]?.stringValue
+    let budgetTokens = reasoningConfig?["budgetTokens"]?.intValue
+    let maxReasoningEffort = reasoningConfig?["maxReasoningEffort"]?.stringValue
+    let display = reasoningConfig?["display"]?.stringValue
     let isAnthropicModel = bedrockIsAnthropicModel(
         modelID: modelID,
         modelFamily: modelFamily,
@@ -625,29 +728,86 @@ func bedrockApplyReasoningConfig(
     let openAIModelID = bedrockOpenAIModelID(modelID)
     let isOpenAIModel = openAIModelID != nil
     let isOpenAIGptOssModel = openAIModelID?.hasPrefix("openai.gpt-oss-") == true
-    let isAnthropicThinkingEnabled = isAnthropicModel && (type == "enabled" || type == "adaptive" || type == "between_tools")
+    let isThinkingEnabled = type == "enabled" || type == "adaptive" || type == "between_tools"
+    let isAnthropicThinkingEnabled = isAnthropicModel && isThinkingEnabled
+    let thinkingBudget = type == "enabled" ? budgetTokens : nil
 
-    if isAnthropicModel && type == "disabled" {
-        bedrockMergeAdditionalModelRequestFields(["thinking": .object(["type": .string("disabled")])], into: &providerOptions)
-    } else if isAnthropicThinkingEnabled {
-        if let budgetTokens, type == "enabled" {
+    func setField(_ key: String, _ fieldValue: JSONValue) {
+        var fields = providerOptions["additionalModelRequestFields"]?.objectValue ?? [:]
+        fields[key] = fieldValue
+        providerOptions["additionalModelRequestFields"] = .object(fields)
+    }
+    func mergeField(_ key: String, _ fieldValue: [String: JSONValue]) {
+        var fields = providerOptions["additionalModelRequestFields"]?.objectValue ?? [:]
+        var existing = fields[key]?.objectValue ?? [:]
+        existing.merge(fieldValue) { _, new in new }
+        fields[key] = .object(existing)
+        providerOptions["additionalModelRequestFields"] = .object(fields)
+    }
+
+    if isAnthropicModel {
+        if let thinkingBudget {
             let existingMaxTokens = inferenceConfig["maxTokens"]?.intValue
-            inferenceConfig["maxTokens"] = .number(Double((existingMaxTokens ?? 4096) + budgetTokens))
-            bedrockMergeAdditionalModelRequestFields([
-                "thinking": .object([
-                    "type": .string("enabled"),
-                    "budget_tokens": .number(Double(budgetTokens))
-                ])
-            ], into: &providerOptions)
-        } else if type == "between_tools" {
-            bedrockMergeAdditionalModelRequestFields(["thinking": ["type": "between_tools"]], into: &providerOptions)
+            inferenceConfig["maxTokens"] = .number(Double(existingMaxTokens.map { $0 + thinkingBudget } ?? (thinkingBudget + 4096)))
+            setField("thinking", .object([
+                "type": .string("enabled"),
+                "budget_tokens": .number(Double(thinkingBudget))
+            ]))
         } else if type == "adaptive" {
             var thinking: [String: JSONValue] = ["type": .string("adaptive")]
-            if let display {
-                thinking["display"] = .string(display)
-            }
-            bedrockMergeAdditionalModelRequestFields(["thinking": .object(thinking)], into: &providerOptions)
+            if let display { thinking["display"] = .string(display) }
+            setField("thinking", .object(thinking))
+        } else if type == "disabled" || type == "between_tools" {
+            setField("thinking", .object(["type": .string(type ?? "")]))
         }
+    } else {
+        if budgetTokens != nil {
+            warnings.append(AIWarning(type: "unsupported", feature: "budgetTokens", message: "budgetTokens applies only to Anthropic models on Bedrock and will be ignored for this model."))
+        }
+        if type == "adaptive" {
+            warnings.append(AIWarning(type: "unsupported", feature: "adaptive thinking", message: "adaptive thinking type applies only to Anthropic models on Bedrock."))
+        }
+    }
+
+    if let maxReasoningEffort {
+        if isAnthropicModel {
+            mergeField("output_config", ["effort": .string(maxReasoningEffort)])
+        } else if isOpenAIModel {
+            if isOpenAIGptOssModel {
+                setField("reasoning_effort", .string(maxReasoningEffort))
+            } else {
+                mergeField("reasoning", ["effort": .string(maxReasoningEffort)])
+            }
+        } else {
+            var nested: [String: JSONValue] = [:]
+            if let type, type != "adaptive" {
+                nested["type"] = .string(type)
+            }
+            if let thinkingBudget {
+                nested["budgetTokens"] = .number(Double(thinkingBudget))
+            }
+            nested["maxReasoningEffort"] = .string(maxReasoningEffort)
+            setField("reasoningConfig", .object(nested))
+        }
+    }
+
+    if modelID.contains("amazon.nova-2-lite-v1:0"),
+       type == "enabled",
+       ["high", "xhigh", "max"].contains(maxReasoningEffort ?? ""),
+       inferenceConfig.removeValue(forKey: "maxTokens") != nil {
+        warnings.append(AIWarning(type: "unsupported", feature: "maxOutputTokens", message: "maxOutputTokens is not supported by \(modelID) when high reasoning is enabled and will be ignored"))
+    }
+
+    if let nativeStructuredOutputSchema {
+        mergeField("output_config", [
+            "format": .object([
+                "type": .string("json_schema"),
+                "schema": anthropicSanitizeJSONSchema(nativeStructuredOutputSchema)
+            ])
+        ])
+    }
+
+    if isAnthropicThinkingEnabled {
         if inferenceConfig.removeValue(forKey: "temperature") != nil {
             warnings.append(AIWarning(type: "unsupported", feature: "temperature", message: "temperature is not supported when thinking is enabled"))
         }
@@ -657,39 +817,6 @@ func bedrockApplyReasoningConfig(
         if inferenceConfig.removeValue(forKey: "topK") != nil {
             warnings.append(AIWarning(type: "unsupported", feature: "topK", message: "topK is not supported when thinking is enabled"))
         }
-    } else if !isAnthropicModel {
-        if budgetTokens != nil {
-            warnings.append(AIWarning(type: "unsupported", feature: "budgetTokens", message: "budgetTokens applies only to Anthropic models on Bedrock and will be ignored for this model."))
-        }
-        if type == "adaptive" {
-            warnings.append(AIWarning(type: "unsupported", feature: "adaptive thinking", message: "adaptive thinking type applies only to Anthropic models on Bedrock."))
-        }
-    }
-
-    guard let maxReasoningEffort else { return }
-    if isAnthropicModel {
-        let existing = providerOptions["additionalModelRequestFields"]?["output_config"]?.objectValue ?? [:]
-        bedrockMergeAdditionalModelRequestFields([
-            "output_config": .object(existing.merging(["effort": .string(maxReasoningEffort)]) { _, new in new })
-        ], into: &providerOptions)
-    } else if isOpenAIModel {
-        if isOpenAIGptOssModel {
-            bedrockMergeAdditionalModelRequestFields(["reasoning_effort": .string(maxReasoningEffort)], into: &providerOptions)
-        } else {
-            bedrockMergeAdditionalModelRequestFields([
-                "reasoning": .object(["effort": .string(maxReasoningEffort)])
-            ], into: &providerOptions)
-        }
-    } else {
-        var nested: [String: JSONValue] = [:]
-        if let type, type != "adaptive" {
-            nested["type"] = .string(type)
-        }
-        if let budgetTokens {
-            nested["budgetTokens"] = .number(Double(budgetTokens))
-        }
-        nested["maxReasoningEffort"] = .string(maxReasoningEffort)
-        bedrockMergeAdditionalModelRequestFields(["reasoningConfig": .object(nested)], into: &providerOptions)
     }
 }
 
@@ -842,43 +969,12 @@ func bedrockOpenAIModelID(_ modelID: String) -> String? {
     return suffix.hasPrefix("openai.") ? suffix : nil
 }
 
-func bedrockMergeAdditionalModelRequestFields(_ fields: [String: JSONValue], into providerOptions: inout [String: JSONValue]) {
-    var existing = providerOptions["additionalModelRequestFields"]?.objectValue ?? [:]
-    existing.merge(fields) { old, new in
-        if var oldObject = old.objectValue,
-           let newObject = new.objectValue {
-            oldObject.merge(newObject) { _, nestedNew in nestedNew }
-            return .object(oldObject)
-        }
-        return new
-    }
-    providerOptions["additionalModelRequestFields"] = .object(existing)
-}
-
-func bedrockDeduplicatedWarnings(_ warnings: [AIWarning]) -> [AIWarning] {
-    var seen: Set<String> = []
-    var output: [AIWarning] = []
-    for warning in warnings {
-        let key = "\(warning.type)|\(warning.feature ?? "")|\(warning.setting ?? "")|\(warning.message ?? "")"
-        if seen.insert(key).inserted {
-            output.append(warning)
-        }
-    }
-    return output
-}
-
-func bedrockToolCalls(from value: JSONValue?, modelID: String = "") -> [AIToolCall] {
-    value?.arrayValue?.enumerated().compactMap { index, part in
-        bedrockToolCall(from: part, index: index, modelID: modelID)
-    } ?? []
-}
-
 func bedrockToolCall(from part: JSONValue, index: Int, modelID: String = "") -> AIToolCall? {
     guard let toolUse = part["toolUse"] else { return nil }
-    let name = toolUse["name"]?.stringValue ?? "tool-\(index)"
+    let name = toolUse["name"]?.stringValue ?? "tool-\(generateId())"
     let rawID = resolvedToolCallID(
         toolUse["toolUseId"]?.stringValue,
-        whenMissing: "tool-call-\(index)"
+        whenMissing: generateId()
     )
     return AIToolCall(
         id: bedrockNormalizeToolCallID(rawID, modelID: modelID),
@@ -888,14 +984,10 @@ func bedrockToolCall(from part: JSONValue, index: Int, modelID: String = "") -> 
     )
 }
 
+/// Upstream `JSON.stringify(part.toolUse.input ?? {})`: the response input is
+/// serialized as returned; only replayed inputs are wrapped in `rawInvalidInput`.
 func bedrockToolArguments(_ value: JSONValue?) -> String {
-    guard let value else { return "{}" }
-    let input: JSONValue
-    if case .object = value {
-        input = value
-    } else {
-        input = .object(["rawInvalidInput": value])
-    }
+    guard let input = bedrockNonNull(value) else { return "{}" }
     guard let data = try? encodeJSONBody(input),
           let text = String(data: data, encoding: .utf8) else {
         return "{}"
@@ -914,7 +1006,7 @@ func bedrockToolResultContent(_ result: AIToolResult, documentCounter: inout Bed
         return [.object(["text": .string(text)])]
     }
     guard let object = output.objectValue, let type = object["type"]?.stringValue else {
-        return [.object(["json": output])]
+        return [.object(["text": .string(bedrockJSONString(output) ?? "")])]
     }
     switch type {
     case "content":
@@ -924,7 +1016,7 @@ func bedrockToolResultContent(_ result: AIToolResult, documentCounter: inout Bed
     case "text", "error-text":
         return [.object(["text": object["value"] ?? .string("")])]
     case "execution-denied":
-        return [.object(["text": object["reason"] ?? .string("Tool call execution denied.")])]
+        return [.object(["text": bedrockNonNull(object["reason"]) ?? .string("Tool call execution denied.")])]
     case "json", "error-json":
         return [.object(["text": .string(bedrockJSONString(object["value"] ?? .object([:])) ?? "")])]
     default:
@@ -1023,59 +1115,63 @@ func bedrockToolResultContentPart(_ item: JSONValue, documentCounter: inout Bedr
     }
 }
 
-func bedrockReasoningText(from value: JSONValue?) -> String {
-    value?.arrayValue?.compactMap { part in
-        part["reasoningContent"]?["reasoningText"]?["text"]?.stringValue
-    }.joined() ?? ""
-}
-
+/// Upstream `doGenerate` provider metadata: present whenever the response has
+/// usage (always) or any of trace/performanceConfig/serviceTier; usage only
+/// carries the cache write and cache detail fields, and `stopSequence` is
+/// always included (null when absent).
 func bedrockProviderMetadata(from raw: JSONValue, isJsonResponseFromTool: Bool = false) -> [String: JSONValue] {
-    var payload: [String: JSONValue] = [:]
-    if let trace = raw["trace"] {
-        payload["trace"] = trace
+    let trace = bedrockNonNull(raw["trace"])
+    let usage = bedrockNonNull(raw["usage"])
+    let performanceConfig = bedrockNonNull(raw["performanceConfig"])
+    let serviceTier = bedrockNonNull(raw["serviceTier"])
+    let stopSequence = raw["additionalModelResponseFields"]?["delta"]?["stop_sequence"]?.stringValue
+    guard trace != nil || usage != nil || performanceConfig != nil || serviceTier != nil
+        || isJsonResponseFromTool || stopSequence != nil else {
+        return [:]
     }
-    if let performanceConfig = raw["performanceConfig"] {
-        payload["performanceConfig"] = performanceConfig
-    }
-    if let serviceTier = raw["serviceTier"] {
-        payload["serviceTier"] = serviceTier
-    }
-    if let stopSequence = raw["additionalModelResponseFields"]?["delta"]?["stop_sequence"] {
-        payload["stopSequence"] = stopSequence
-    }
-    if let usage = raw["usage"] {
-        payload["usage"] = usage
-    }
+    var payload = bedrockMetadataPayload(
+        trace: trace,
+        performanceConfig: performanceConfig,
+        serviceTier: serviceTier,
+        usage: usage
+    )
     if isJsonResponseFromTool {
         payload["isJsonResponseFromTool"] = .bool(true)
     }
-    guard !payload.isEmpty else { return [:] }
+    payload["stopSequence"] = stopSequence.map(JSONValue.string) ?? .null
     return [
         "amazonBedrock": .object(payload),
         "bedrock": .object(payload)
     ]
 }
 
-func bedrockProviderMetadata(fromStreamMetadata raw: JSONValue?) -> [String: JSONValue] {
-    guard let raw else { return [:] }
+func bedrockMetadataPayload(
+    trace: JSONValue?,
+    performanceConfig: JSONValue?,
+    serviceTier: JSONValue?,
+    usage: JSONValue?
+) -> [String: JSONValue] {
     var payload: [String: JSONValue] = [:]
-    if let trace = raw["trace"] {
+    if let trace = bedrockNonNull(trace), trace.objectValue != nil || trace.arrayValue != nil {
         payload["trace"] = trace
     }
-    if let performanceConfig = raw["performanceConfig"] {
+    if let performanceConfig = bedrockNonNull(performanceConfig) {
         payload["performanceConfig"] = performanceConfig
     }
-    if let serviceTier = raw["serviceTier"] {
+    if let serviceTier = bedrockNonNull(serviceTier) {
         payload["serviceTier"] = serviceTier
     }
-    if let usage = raw["usage"] {
-        payload["usage"] = usage
+    var cacheUsage: [String: JSONValue] = [:]
+    if let cacheWrite = bedrockNonNull(usage?["cacheWriteInputTokens"]) {
+        cacheUsage["cacheWriteInputTokens"] = cacheWrite
     }
-    guard !payload.isEmpty else { return [:] }
-    return [
-        "amazonBedrock": .object(payload),
-        "bedrock": .object(payload)
-    ]
+    if let cacheDetails = bedrockNonNull(usage?["cacheDetails"]) {
+        cacheUsage["cacheDetails"] = cacheDetails
+    }
+    if !cacheUsage.isEmpty {
+        payload["usage"] = .object(cacheUsage)
+    }
+    return payload
 }
 
 func bedrockFinishReason(_ reason: String?, isJsonResponseFromTool: Bool = false) -> String? {
@@ -1095,11 +1191,23 @@ func bedrockFinishReason(_ reason: String?, isJsonResponseFromTool: Bool = false
     }
 }
 
+/// Upstream `convertAmazonBedrockUsage`: input totals include cache reads and
+/// writes, `noCache` is the reported `inputTokens`, and the raw usage is kept.
 func bedrockUsage(from raw: JSONValue?) -> TokenUsage? {
-    guard let raw else { return nil }
+    guard let raw = bedrockNonNull(raw), raw.objectValue != nil else { return nil }
+    let inputTokens = raw["inputTokens"]?.intValue
+    let outputTokens = raw["outputTokens"]?.intValue
+    let cacheReadTokens = raw["cacheReadInputTokens"]?.intValue ?? 0
+    let cacheWriteTokens = raw["cacheWriteInputTokens"]?.intValue ?? 0
+    let inputTotal = inputTokens.map { $0 + cacheReadTokens + cacheWriteTokens }
     return TokenUsage(
-        inputTokens: raw["inputTokens"]?.intValue,
-        outputTokens: raw["outputTokens"]?.intValue,
-        totalTokens: raw["totalTokens"]?.intValue
+        inputTokens: inputTotal,
+        outputTokens: outputTokens,
+        totalTokens: inputTotal.flatMap { input in outputTokens.map { input + $0 } },
+        inputTokensNoCache: inputTokens,
+        inputTokensCacheRead: cacheReadTokens,
+        inputTokensCacheWrite: cacheWriteTokens,
+        outputTextTokens: outputTokens,
+        rawValue: raw
     )
 }

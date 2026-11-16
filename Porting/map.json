@@ -56,6 +56,7 @@
     "tests": [
       "Tests/SwiftAIAmazonBedrockTests/AmazonBedrockEventStreamParserTests.swift",
       "Tests/SwiftAIAmazonBedrockTests/AmazonBedrockMediaAndRerankingTests.swift",
+      "Tests/SwiftAIAmazonBedrockTests/AmazonBedrockParityAuditTests.swift",
       "Tests/SwiftAIAmazonBedrockTests/AmazonBedrockTests.swift",
       "Tests/SwiftAIAmazonBedrockTests/AmazonBedrockUpstream5068Tests.swift",
       "Tests/SwiftAIAmazonBedrockTests/FixtureDownloadTransport.swift",

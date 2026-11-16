@@ -142,17 +142,54 @@ private func bedrockUpstreamProvider(
     #expect(messages.allSatisfy { $0["role"]?.stringValue == "user" })
 }
 
+// Upstream amazon-bedrock-usage-raw.test.ts: "preserves complete raw usage
+// through doGenerate parsing".
+private let bedrockCompleteUsage = #"{"inputTokens":13,"outputTokens":5,"totalTokens":18,"cacheReadInputTokens":3,"cacheWriteInputTokens":2,"cacheDetails":[{"inputTokens":2,"ttl":"T5M","providerCacheMetadata":{"source":"provider"}}],"providerUsageMetadata":{"serverToolUsage":{}}}"#
+
+private func expectBedrockNormalizedUsage(_ usage: TokenUsage?) throws {
+    let usage = try #require(usage)
+    #expect(usage.inputTokens == 18)
+    #expect(usage.inputTokensNoCache == 13)
+    #expect(usage.inputTokensCacheRead == 3)
+    #expect(usage.inputTokensCacheWrite == 2)
+    #expect(usage.outputTokens == 5)
+    #expect(usage.outputTextTokens == 5)
+    #expect(usage.outputReasoningTokens == nil)
+    #expect(usage.rawValue == (try decodeJSONBody(Data(bedrockCompleteUsage.utf8))))
+}
+
 @Test func amazonBedrockPreservesCompleteRawUsageInProviderMetadata() async throws {
     let transport = RecordingTransport(response: jsonResponse("""
-    {"output":{"message":{"content":[{"text":"ok"}]}},"stopReason":"end_turn","usage":{"inputTokens":2,"outputTokens":1,"totalTokens":3,"futureUsageField":{"value":7}}}
+    {"output":{"message":{"role":"assistant","content":[]}},"stopReason":"end_turn","usage":\(bedrockCompleteUsage)}
     """))
     let model = try bedrockUpstreamProvider(transport: transport)
         .languageModel("anthropic.claude-3-haiku-20240307-v1:0")
 
-    let result = try await model.generate(LanguageModelRequest(messages: [.user("Hi")]))
+    let result = try await model.generate(LanguageModelRequest(messages: [.user("Hello")]))
 
-    #expect(result.providerMetadata["amazonBedrock"]?["usage"]?["inputTokens"]?.intValue == 2)
-    #expect(result.providerMetadata["amazonBedrock"]?["usage"]?["futureUsageField"]?["value"]?.intValue == 7)
+    try expectBedrockNormalizedUsage(result.usage)
+    // Provider metadata only carries the cache write fields, not the raw usage.
+    #expect(result.providerMetadata["amazonBedrock"]?["usage"] == [
+        "cacheWriteInputTokens": 2,
+        "cacheDetails": [["inputTokens": 2, "ttl": "T5M", "providerCacheMetadata": ["source": "provider"]]]
+    ])
+    #expect(result.providerMetadata["amazonBedrock"]?["stopSequence"] == .null)
+}
+
+// Upstream: "preserves complete raw usage through the event-stream parser".
+@Test func amazonBedrockPreservesCompleteRawUsageThroughEventStream() async throws {
+    let transport = RecordingTransport(response: amazonEventStreamResponse([
+        ("messageStop", #"{"stopReason":"end_turn"}"#),
+        ("metadata", #"{"metrics":{"latencyMs":1},"usage":"# + bedrockCompleteUsage + "}")
+    ]))
+    let model = try bedrockUpstreamProvider(transport: transport)
+        .languageModel("anthropic.claude-3-haiku-20240307-v1:0")
+
+    var finishUsage: TokenUsage?
+    for try await part in model.stream(LanguageModelRequest(messages: [.user("Hello")])) {
+        if case let .finishMetadata(_, usage, _) = part { finishUsage = usage }
+    }
+    try expectBedrockNormalizedUsage(finishUsage)
 }
 
 @Test func amazonBedrockEmbeddingModelFamilySupportsOpaqueApplicationProfileARNs() async throws {

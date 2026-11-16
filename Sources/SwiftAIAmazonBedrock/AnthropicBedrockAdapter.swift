@@ -123,8 +123,16 @@ func amazonBedrockAnthropicMediaType(contentType: String?, data: Data, url: Stri
 }
 
 func amazonBedrockAnthropicTool(_ tool: JSONValue, betas: inout [String]) -> JSONValue {
-    guard var object = tool.objectValue, let originalType = object["type"]?.stringValue else {
-        return tool
+    guard var object = tool.objectValue else { return tool }
+    // Bedrock rejects the per-tool eager_input_streaming field; upstream
+    // removes it and declares the equivalent beta instead.
+    if let eagerInputStreaming = object.removeValue(forKey: "eager_input_streaming"),
+       eagerInputStreaming.boolValue == true,
+       !betas.contains("fine-grained-tool-streaming-2025-05-14") {
+        betas.append("fine-grained-tool-streaming-2025-05-14")
+    }
+    guard let originalType = object["type"]?.stringValue else {
+        return .object(object)
     }
     let mappedType: String
     switch originalType {

@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "package": "swift-ai-amazon-bedrock",
-  "version": "1.1.3",
-  "releaseID": "weekly-upstream-20261115",
+  "version": "1.2.0",
+  "releaseID": "upstream-parity-20261116",
   "source": {
-    "commit": "1e543b35e0259a5bda888665dacf2d4a7f1bb0ed",
-    "baseCommit": "1e543b35e0259a5bda888665dacf2d4a7f1bb0ed",
+    "commit": "1c457dea36be42376a6853aecd5c48ffc4942178",
+    "baseCommit": "1c457dea36be42376a6853aecd5c48ffc4942178",
     "workingTree": false,
-    "inputsSHA256": "5508ffc6347bffaed13fb29409eb856df9a7796d3ebdcb6f623d1e8871b52999"
+    "inputsSHA256": "d7b8f52add7828d7e9ed20418fe072e7db03e75483a168bb7f5c34e9d2a04a13"
   },
   "dependencies": [
     {
       "package": "swift-ai-core",
-      "from": "1.3.0"
+      "from": "1.6.0"
     },
     {
       "package": "swift-ai-anthropic",
@@ -29,9 +29,9 @@
   ],
   "changes": [
     {
-      "id": "weekly-upstream-20261115",
-      "notes": "Pass thinking block binding fields through the current Anthropic InvokeModel unary and streaming wire paths, matching removal of the upstream prefix_mismatch_behavior rename. Preserve the legacy directly callable transform helper for existing callers. Reviewed npm delta: @ai-sdk/amazon-bedrock 5.0.141 to 5.0.142. Validation passed: node Scripts/test-packages.mjs (55 owning packages, 2451 owning tests and 1736 compatibility tests), generation checks, 27 tooling tests, isolation/version checks, deterministic exports and minimum-dependency consumers. Documentation check/build passed (104 pages). Publication is gated by exact-source Swift 6.3.3 CI; subsequent public refs and clients are recorded in Docs/ReleaseVerification20261115.json. Paid/live-service checks were not run; this delta does not claim full-package parity.",
-      "compatibility": "Compatible wire-behavior correction. Existing provider and helper selectors remain; no dependency minimum change."
+      "id": "upstream-parity-20261116",
+      "notes": "Usage includes cache tokens like upstream, provider and response metadata arrive on the finish part, `stopSequence` paths, `anthropicBeta` forwarding, message grouping, blank text blocks and the stream state machine match upstream. Function tools send only their input schema; `maxImagesPerCall` is public (Nova Canvas 5, others 1).",
+      "compatibility": "Source-compatible; changes are additive. Request bodies, results, warnings and errors change to match the reviewed upstream package."
     }
   ],
   "canonicalDirectory": "Packages/swift-ai-amazon-bedrock",
@@ -40,7 +40,7 @@
       "name": "@ai-sdk/amazon-bedrock",
       "reviewedVersion": "5.0.142",
       "ledgerKind": "provider",
-      "evidence": "`AIProviders.amazonBedrock`, `AIProviders.amazonBedrockAnthropic`, `AIProviders.bedrockMantle`, `AmazonBedrockModels.swift`, `AmazonBedrockTests.swift`, `AnthropicBedrockUpstream202609Tests.swift`; 2026-11-01 delta: Docs/WeeklyUpstreamAudit20261101.json; 2026-11-08 delta: Docs/WeeklyUpstreamAudit20261108.json; 2026-11-14 delta: Docs/WeeklyUpstreamAudit20261114.json; 2026-11-15 delta: Docs/WeeklyUpstreamAudit20261115.json",
+      "evidence": "`AIProviders.amazonBedrock`, `AIProviders.amazonBedrockAnthropic`, `AIProviders.bedrockMantle`, `AmazonBedrockModels.swift`, `AmazonBedrockTests.swift`, `AnthropicBedrockUpstream202609Tests.swift`; 2026-11-01 delta: Docs/Archive/WeeklyUpstreamAudit20261101.json; 2026-11-08 delta: Docs/Archive/WeeklyUpstreamAudit20261108.json; 2026-11-14 delta: Docs/Archive/WeeklyUpstreamAudit20261114.json; 2026-11-15 delta: Docs/Archive/WeeklyUpstreamAudit20261115.json",
       "reviewStatus": "imported-reviewed-with-gaps",
       "archiveIntegrity": "sha512-eOwZ14N8XmamP6hZPirRen+xS1F5563MIPBz8RiQiV/bbcxZvEepQKPe85QeKDm+NwiBVrCXEFS6dtB08vjjJQ==",
       "sourceRef": "npm:@ai-sdk/amazon-bedrock@5.0.142",
@@ -53,7 +53,7 @@
         "ProviderV4",
         "RerankingModelV4"
       ],
-      "contractReview": "2026-11-15: published source/declarations and exact matching-release tests reviewed separately. Native delta scenarios, per-file dispositions, unchanged-catalog evidence and explicit remaining gaps are recorded in Docs/WeeklyUpstreamAudit20261115.json. Required checks remain a separate gate; no full-package/live-service parity claim."
+      "contractReview": "2026-11-15: published source/declarations and exact matching-release tests reviewed separately. Native delta scenarios, per-file dispositions, unchanged-catalog evidence and explicit remaining gaps are recorded in Docs/Archive/WeeklyUpstreamAudit20261115.json. Required checks remain a separate gate; no full-package/live-service parity claim."
     }
   ],
   "note": "Independent port. Imported test refs and contract review gaps retain their original status; export is not new upstream parity proof.",
@@ -72,19 +72,19 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Porting/map.json",
-      "sha256": "c2ff9f0a97bf29453f0473d7ae1659601069457d3e94ee89be9787ccc847e9bd"
+      "sha256": "4714fa3a73cbae1a7fcd0bc48e1979fa3b4dda58c8d13f78b597738c9556101f"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/README.md",
-      "sha256": "23b345eafe23f659d7d0a80111d11253496d21f41d01862f48ad3c21587ab9fe"
+      "sha256": "b4155bebd2c8f2dd76c625f1f498200d9ffe66335f2a2f08da667ab1be9b553a"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockAnthropicLanguageModel.swift",
-      "sha256": "a4e969d00d2cdf5b1a884a1ecde8df05dcc682b6b5514b56bb383e235d614cd8"
+      "sha256": "eea6e8e28d8673dc91af367bb17c557a93a2bf42bed13124ed1795c5df9d33fb"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockEmbeddingModel.swift",
-      "sha256": "cf10e3f7c4f667f41393018b24da651763a77b8b88309db3d00067dc9ee91615"
+      "sha256": "f33c624a086289f18544ef58fd68ffdd40ca2d955266269b36885be5979e4909"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockImageInputCapabilities.swift",
@@ -92,11 +92,11 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockImageModel.swift",
-      "sha256": "dff15ed2d1c3f5383dc939bf6d2a1e019a9154c71b1dc1d01c5a91ae63a4488a"
+      "sha256": "97fdf219c3b9aacaa64d450817b87f999e198c2f1534f3493c48c870d718d29e"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockLanguageModel.swift",
-      "sha256": "fef68c863cc383b1acb52e47abb7384bf2bc62b86e85bdfa9e9ce3c6ce42644b"
+      "sha256": "8e54f31e419596c1adcf00609f80a9f7bc080a3e0bbb334b4ff81a63ba2df888"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockModels.swift",
@@ -104,7 +104,7 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockProvider.swift",
-      "sha256": "e12899a2e50650e6a4506b63586f202675de154239413b0b1aedd3588abfc778"
+      "sha256": "d07565e1a7a1c5af278430a6923ec46c0e42af2a42ce424ea9f613a12b7c11ee"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockRerankingModel.swift",
@@ -112,31 +112,35 @@
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AmazonBedrockShared.swift",
-      "sha256": "3b17e0c7c98993b981ae536405cac8b9d072241a9421d2b330c47508c0f3876c"
+      "sha256": "b9276f76af475237615d5ac3163fbd7cb4f5d36dfd6d615bb8b6c768a070c62b"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/AnthropicBedrockAdapter.swift",
-      "sha256": "4286db5dc8dd5c3feeb842140438d96046baa4bd3465f722d025706e16da0fc3"
+      "sha256": "0e01817a8eafe5f74ddfcce76dac009c19a365143b3302a683867ffdc2f3410e"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Sources/SwiftAIAmazonBedrock/BedrockStreamParsing.swift",
-      "sha256": "cff53e9bab5c101198fbee692c6c6d7a39802916ef33b60bc1eae115cfec4401"
+      "sha256": "416aaa3b3d6d5dd5c0ab5f8fa5b5956dbd8651889af2dc43c3aee53c31e5225b"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockEventStreamParserTests.swift",
-      "sha256": "ca547c3ce7f50b8b0c4ab54af5531c7bb601eca16bf4a18464eaeabd9579af27"
+      "sha256": "204b5421d54ceab61db7118ccb975b581c47fe69dd30f3684d85c434569871ca"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockMediaAndRerankingTests.swift",
       "sha256": "df2c823f98097de3944bd60c52ba43f0a645e1c5db2e21ea4b22b19ba953e62c"
     },
     {
+      "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockParityAuditTests.swift",
+      "sha256": "ecf468378ee2bdc8afa2e3e561ca07ba176c44eefe88a3494bf9d955888a4f53"
+    },
+    {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockTests.swift",
-      "sha256": "69647cca336d38762e6782b297e6425e4767e025c4b63fb185c6046c0f5bf6bd"
+      "sha256": "7396c35b487f4248f5bb6afb3e730ff6fc0db523d2fa8f01fa8ba338f3612ad1"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/AmazonBedrockUpstream5068Tests.swift",
-      "sha256": "8ab55a83c2aa1f88dc0e6b248890aaa037187d9147739ee70ef7ecfb59ec31ea"
+      "sha256": "8db241c3f0c51a8e8d7184585d96a125d77676707ae3285800067eb81c067d57"
     },
     {
       "canonicalPath": "Packages/swift-ai-amazon-bedrock/Tests/SwiftAIAmazonBedrockTests/FixtureDownloadTransport.swift",

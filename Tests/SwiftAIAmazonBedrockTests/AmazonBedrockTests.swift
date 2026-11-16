@@ -349,7 +349,8 @@ import Testing
     let content = try #require(body["messages"]?[0]?["content"]?.arrayValue)
     let toolResult = try #require(content[0]["toolResult"])
     #expect(toolResult["toolUseId"]?.stringValue == "tool-1")
-    #expect(toolResult["status"]?.stringValue == "success")
+    // Upstream toolResult blocks carry only toolUseId and content.
+    #expect(toolResult["status"] == nil)
     #expect(toolResult["content"]?[0]?["text"]?.stringValue == "first result")
     #expect(toolResult["content"]?[1]?["image"]?["format"]?.stringValue == "png")
     #expect(toolResult["content"]?[1]?["image"]?["source"]?["bytes"]?.stringValue == imageData)

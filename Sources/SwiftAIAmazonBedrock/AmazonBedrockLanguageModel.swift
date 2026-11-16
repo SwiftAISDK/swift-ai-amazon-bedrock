@@ -28,7 +28,7 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
 
     public func generate(_ request: LanguageModelRequest) async throws -> TextGenerationResult {
         let prepared = try converseBody(for: request)
-        let raw = try await config.sendJSON(path: "/model/\(encodedModelID)/converse", body: prepared.body, headers: request.headers, abortSignal: request.abortSignal)
+        let (raw, httpResponse) = try await config.sendJSONResponse(path: "/model/\(encodedModelID)/converse", body: prepared.body, headers: request.headers, abortSignal: request.abortSignal, errorIncludesType: false)
         let responseBlocks = raw["output"]?["message"]?["content"]?.arrayValue ?? []
         let jsonTextExtractor = prepared.usesJsonInstruction ? BedrockJSONObjectTextExtractor() : nil
         var content: [AIResultContentPart] = []
@@ -58,17 +58,21 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
                 if let reasoningText = reasoningContent["reasoningText"] {
                     let value = reasoningText["text"]?.stringValue ?? ""
                     reasoning += value
+                    let signature = reasoningText["signature"]?.stringValue
                     let metadata = bedrockReasoningProviderMetadata(
                         key: "signature",
-                        value: reasoningText["signature"]
+                        value: signature?.isEmpty == false ? signature.map(JSONValue.string) : nil
                     )
                     content.append(.reasoning(value, providerMetadata: metadata))
                     continue
                 }
-                if let redactedData = reasoningContent["redactedReasoning"]?["data"] {
+                if let redactedReasoning = bedrockNonNull(reasoningContent["redactedReasoning"]) {
                     content.append(.reasoning(
                         "",
-                        providerMetadata: bedrockReasoningProviderMetadata(key: "redactedData", value: redactedData)
+                        providerMetadata: bedrockReasoningProviderMetadata(
+                            key: "redactedData",
+                            value: bedrockNonNull(redactedReasoning["data"]) ?? .string("")
+                        )
                     ))
                     continue
                 }
@@ -103,7 +107,8 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             providerMetadata: bedrockProviderMetadata(from: raw, isJsonResponseFromTool: isJsonResponseFromTool),
             rawValue: raw,
             warnings: prepared.warnings,
-            requestMetadata: AIRequestMetadata(body: prepared.body, headers: request.headers, url: try config.request(path: "/model/\(encodedModelID)/converse", body: prepared.body, headers: request.headers, abortSignal: request.abortSignal).url.absoluteString)
+            requestMetadata: AIRequestMetadata(body: prepared.body, headers: request.headers, url: try config.request(path: "/model/\(encodedModelID)/converse", body: prepared.body, headers: request.headers, abortSignal: request.abortSignal).url.absoluteString),
+            responseMetadata: bedrockResponseMetadata(headers: httpResponse.headers, modelID: modelID, body: raw)
         )
     }
 
@@ -162,29 +167,10 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
 
     private func converseBody(for request: LanguageModelRequest) throws -> BedrockPreparedConverseCall {
         var providerOptions = try bedrockRequestProviderOptions(providerOptions: request.providerOptions, extraBody: request.extraBody)
+        // Upstream keeps the raw, unparsed namespace and spreads its remaining
+        // keys into the Converse body (for example guardrailConfig).
+        let rawNamespaceOptions = providerOptions
         var warnings: [AIWarning] = []
-        let explicitReasoningEffort = providerOptions["reasoningConfig"]?["maxReasoningEffort"]?.stringValue
-        bedrockApplyTopLevelReasoning(
-            request.reasoning,
-            modelID: modelID,
-            modelFamily: settings.modelFamily,
-            maxOutputTokens: request.maxOutputTokens,
-            providerOptions: &providerOptions,
-            warnings: &warnings
-        )
-        bedrockNormalizeDisabledThinking(
-            modelID: modelID,
-            modelFamily: settings.modelFamily,
-            explicitReasoningEffort: explicitReasoningEffort,
-            explicitlyDisabled: request.providerOptions["amazonBedrock"]?["reasoningConfig"]?["type"] == "disabled"
-                || request.providerOptions["bedrock"]?["reasoningConfig"]?["type"] == "disabled"
-                || request.extraBody["amazonBedrock"]?["reasoningConfig"]?["type"] == "disabled"
-                || request.extraBody["bedrock"]?["reasoningConfig"]?["type"] == "disabled",
-            providerOptions: &providerOptions,
-            warnings: &warnings
-        )
-        let enableDocumentCitations = bedrockDocumentCitationsEnabled(providerOptions)
-        var documentCounter = BedrockDocumentNames()
         if request.frequencyPenalty != nil {
             warnings.append(AIWarning(type: "unsupported", feature: "frequencyPenalty"))
         }
@@ -201,7 +187,6 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
         var temperature = request.temperature
         var topP = request.topP
         var topK = request.topK
-        var stopSequences = request.stopSequences
         if capabilities.rejectsSamplingParameters {
             if temperature != nil {
                 warnings.append(AIWarning(type: "unsupported", feature: "temperature", message: "temperature is not supported by \(modelID) and will be ignored"))
@@ -218,28 +203,33 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
         }
         if !isOpenAIModel || isOpenAIGptOssModel, let value = temperature {
             if value > 1 {
-                warnings.append(AIWarning(type: "unsupported", feature: "temperature", message: "\(value) exceeds bedrock maximum of 1.0. clamped to 1.0"))
+                warnings.append(AIWarning(type: "unsupported", feature: "temperature", message: "\(bedrockJSNumber(value)) exceeds bedrock maximum of 1.0. clamped to 1.0"))
                 temperature = 1
             } else if value < 0 {
-                warnings.append(AIWarning(type: "unsupported", feature: "temperature", message: "\(value) is below bedrock minimum of 0. clamped to 0"))
+                warnings.append(AIWarning(type: "unsupported", feature: "temperature", message: "\(bedrockJSNumber(value)) is below bedrock minimum of 0. clamped to 0"))
                 temperature = 0
             }
         }
-        if isOpenAIModel {
-            let unsupported: [(String, Bool)] = [
-                ("temperature", !isOpenAIGptOssModel && temperature != nil),
-                ("topP", !isOpenAIGptOssModel && topP != nil),
-                ("stopSequences", !stopSequences.isEmpty)
-            ]
-            for (feature, isPresent) in unsupported where isPresent {
-                warnings.append(AIWarning(type: "unsupported", feature: feature, message: "\(feature) is not supported by this OpenAI model on the Converse API"))
-            }
-            if !isOpenAIGptOssModel {
-                temperature = nil
-                topP = nil
-            }
-            stopSequences = []
-        }
+
+        let explicitReasoningEffort = providerOptions["reasoningConfig"]?["maxReasoningEffort"]?.stringValue
+        let explicitlyDisabled = providerOptions["reasoningConfig"]?["type"]?.stringValue == "disabled"
+        bedrockApplyTopLevelReasoning(
+            request.reasoning,
+            modelID: modelID,
+            modelFamily: settings.modelFamily,
+            maxOutputTokens: request.maxOutputTokens,
+            providerOptions: &providerOptions,
+            warnings: &warnings
+        )
+        bedrockNormalizeDisabledThinking(
+            modelID: modelID,
+            modelFamily: settings.modelFamily,
+            explicitReasoningEffort: explicitReasoningEffort,
+            explicitlyDisabled: explicitlyDisabled,
+            providerOptions: &providerOptions,
+            warnings: &warnings
+        )
+        let enableDocumentCitations = bedrockDocumentCitationsEnabled(providerOptions)
         var effectiveTools = request.tools
         var effectiveToolChoice = request.toolChoice ?? providerOptions["toolChoice"] ?? request.extraBody["toolChoice"]
         let responseJSONSchema = bedrockResponseJSONSchema(from: request.responseFormat)
@@ -248,7 +238,6 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             modelFamily: settings.modelFamily,
             reasoningConfig: providerOptions["reasoningConfig"]
         )
-        let modelSupportsStructuredOutput = settings.modelFamily == .anthropic || capabilities.supportsStructuredOutput
         let structuredOutputMode = providerOptions["structuredOutputMode"]?.stringValue
             ?? request.providerOptions["anthropic"]?["structuredOutputMode"]?.stringValue
             ?? request.extraBody["anthropic"]?["structuredOutputMode"]?.stringValue
@@ -268,7 +257,9 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
         }
 
         let modelSupportsNativeStructuredOutput = bedrockSupportsNativeStructuredOutput(modelID: modelID)
-            && (modelSupportsStructuredOutput || bedrockReasoningConfigEnabled(providerOptions["reasoningConfig"]))
+            && (capabilities.supportsStructuredOutput
+                || bedrockReasoningConfigEnabled(providerOptions["reasoningConfig"])
+                || settings.modelFamily == .anthropic)
         let useNativeStructuredOutput = responseJSONSchema != nil
             && isAnthropicModel
             && (structuredOutputMode == "outputFormat"
@@ -278,27 +269,18 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             && isAnthropicModel
             && (capabilities.rejectsForcedToolUse
                 || (modelID.contains("claude-")
-                    && (!capabilities.isKnownModel || !modelSupportsStructuredOutput)
+                    && (!capabilities.isKnownModel || !capabilities.supportsStructuredOutput)
                     && !bedrockSupportsNativeStructuredOutput(modelID: modelID)
                     && structuredOutputMode != "jsonTool")
                 || (structuredOutputMode != "jsonTool"
                     && !bedrockSupportsStrictToolSpec(modelID: modelID)
                     && !request.tools.isEmpty))
         let usesJsonResponseTool = responseJSONSchema != nil && !useNativeStructuredOutput && !usesJsonInstruction
-        if let responseJSONSchema, useNativeStructuredOutput {
-            bedrockMergeAdditionalModelRequestFields([
-                "output_config": .object([
-                    "format": .object([
-                        "type": .string("json_schema"),
-                        "schema": anthropicSanitizeJSONSchema(responseJSONSchema)
-                    ])
-                ])
-            ], into: &providerOptions)
-        } else if let responseJSONSchema, usesJsonResponseTool {
-            let choice = effectiveToolChoice?["type"]?.stringValue
+        if let responseJSONSchema, usesJsonResponseTool {
+            let choice = effectiveToolChoice?["type"]?.stringValue ?? effectiveToolChoice?.stringValue
             let selected = effectiveToolChoice?["toolName"]?.stringValue ?? effectiveToolChoice?["name"]?.stringValue
             effectiveTools = effectiveTools.filter { name, _ in choice != "none" && (choice != "tool" || name == selected) }
-            effectiveTools["json"] = responseJSONSchema
+            effectiveTools["json"] = bedrockJSONResponseTool(schema: responseJSONSchema)
             effectiveToolChoice = .object(["type": .string("required")])
         }
         let preparedTools = bedrockPrepareTools(
@@ -310,250 +292,25 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             disableParallelToolUse: request.providerOptions["anthropic"]?["disableParallelToolUse"]?.boolValue
                 ?? request.extraBody["anthropic"]?["disableParallelToolUse"]?.boolValue
         )
-        if let additionalModelRequestFields = preparedTools.additionalModelRequestFields {
-            bedrockMergeAdditionalModelRequestFields(additionalModelRequestFields, into: &providerOptions)
-        }
         warnings.append(contentsOf: preparedTools.warnings)
-
-        let messagesWithJSONInstruction = usesJsonInstruction
-            ? injectJSONInstruction(
-                into: request.messages,
-                schema: responseJSONSchema,
-                instruction: AIJSONInstruction(
-                    schemaSuffix: "You MUST answer with only a JSON object that matches the JSON schema above. Do not wrap it in markdown fences or include any other text."
-                )
-            )
-            : request.messages
-
-        let system = messagesWithJSONInstruction
-            .filter { $0.role == .system }
-            .flatMap { message -> [JSONValue] in
-                var blocks = message.content.compactMap(\.text).map { JSONValue.object(["text": .string($0)]) }
-                if let cachePoint = bedrockCachePoint(from: message.providerMetadata) {
-                    blocks.append(cachePoint)
-                }
-                return blocks
-            }
-
-        let convertedMessages = try messagesWithJSONInstruction
-            .filter { $0.role != .system }
-            .compactMap { message -> JSONValue? in
-                var content: [JSONValue] = []
-                for part in message.content {
-                    switch part {
-                    case let .text(text, providerMetadata):
-                        if message.role == .assistant && text.isEmpty && !providerMetadata.isEmpty && providerMetadata["amazonBedrock"] == nil && providerMetadata["bedrock"] == nil { continue }
-                        content.append(try bedrockGuardedTextBlock(text: text, providerMetadata: providerMetadata))
-                        if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                            content.append(cachePoint)
-                        }
-                    case let .reasoning(text, providerMetadata):
-                        if let reasoning = bedrockReasoningContentBlock(text: text, providerMetadata: providerMetadata) {
-                            content.append(reasoning)
-                        }
-                        if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                            content.append(cachePoint)
-                        }
-                    case .reasoningFile, .custom:
-                        content.append(.object(["text": .string("")]))
-                    case let .imageURL(url, providerMetadata):
-                        guard bedrockIsS3URL(url), let imageFormat = bedrockImageFormat(forURL: url) else {
-                            throw AIError.invalidArgument(
-                                argument: "messages.content.imageURL",
-                                message: "Amazon Bedrock Converse supports only s3:// image URLs ending in .jpg, .jpeg, .png, .gif, or .webp."
-                            )
-                        }
-                        let imageBlock: JSONValue = .object([
-                            "image": .object([
-                                "format": .string(imageFormat),
-                                "source": .object([
-                                    "s3Location": .object(["uri": .string(url)])
-                                ])
-                            ])
-                        ])
-                        content.append(bedrockGuardedImageBlock(imageBlock, providerMetadata: providerMetadata))
-                        if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                            content.append(cachePoint)
-                        }
-                    case let .data(mimeType, data, providerMetadata):
-                        let resolvedMimeType = try resolveFullMediaType(mediaType: mimeType, data: data)
-                        if let imageFormat = bedrockImageFormat(for: resolvedMimeType) {
-                            let imageBlock: JSONValue = .object([
-                                "image": .object([
-                                    "format": .string(imageFormat),
-                                    "source": .object(["bytes": .string(data.base64EncodedString())])
-                                ])
-                            ])
-                            content.append(bedrockGuardedImageBlock(imageBlock, providerMetadata: providerMetadata))
-                            if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                                content.append(cachePoint)
-                            }
-                            continue
-                        }
-
-                        if let videoFormat = bedrockVideoFormat(for: resolvedMimeType) {
-                            content.append(.object([
-                                "video": .object([
-                                    "format": .string(videoFormat),
-                                    "source": .object(["bytes": .string(data.base64EncodedString())])
-                                ])
-                            ]))
-                            if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                                content.append(cachePoint)
-                            }
-                            continue
-                        }
-
-                        guard let documentFormat = bedrockDocumentFormat(for: resolvedMimeType) else {
-                            throw AIError.invalidArgument(
-                                argument: "messages.content.data.mimeType",
-                                message: "Amazon Bedrock Converse supports image MIME types \(bedrockSupportedImageMimeTypes.joined(separator: ", ")), video MIME types \(bedrockSupportedVideoMimeTypes.joined(separator: ", ")), or document MIME types \(bedrockSupportedDocumentMimeTypes.joined(separator: ", ")); got \(mimeType)."
-                            )
-                        }
-
-                        var document: [String: JSONValue] = [
-                            "format": .string(documentFormat),
-                            "name": .string(bedrockDocumentName(nil, documentCounter: &documentCounter)),
-                            "source": .object(["bytes": .string(data.base64EncodedString())])
-                        ]
-                        if enableDocumentCitations || bedrockDocumentCitationsEnabled(providerMetadata) {
-                            document["citations"] = .object(["enabled": .bool(true)])
-                        }
-                        content.append(.object(["document": .object(document)]))
-                        if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                            content.append(cachePoint)
-                        }
-                    case let .file(mimeType, data, filename, providerMetadata):
-                        let resolvedMimeType = try resolveFullMediaType(mediaType: mimeType, data: data)
-                        if let imageFormat = bedrockImageFormat(for: resolvedMimeType) {
-                            let imageBlock: JSONValue = .object([
-                                "image": .object([
-                                    "format": .string(imageFormat),
-                                    "source": .object(["bytes": .string(data.base64EncodedString())])
-                                ])
-                            ])
-                            content.append(bedrockGuardedImageBlock(imageBlock, providerMetadata: providerMetadata))
-                            if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                                content.append(cachePoint)
-                            }
-                            continue
-                        }
-
-                        if let videoFormat = bedrockVideoFormat(for: resolvedMimeType) {
-                            content.append(.object([
-                                "video": .object([
-                                    "format": .string(videoFormat),
-                                    "source": .object(["bytes": .string(data.base64EncodedString())])
-                                ])
-                            ]))
-                            if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                                content.append(cachePoint)
-                            }
-                            continue
-                        }
-
-                        guard let documentFormat = bedrockDocumentFormat(for: resolvedMimeType) else {
-                            throw AIError.invalidArgument(
-                                argument: "messages.content.file.mimeType",
-                                message: "Amazon Bedrock Converse supports image MIME types \(bedrockSupportedImageMimeTypes.joined(separator: ", ")), video MIME types \(bedrockSupportedVideoMimeTypes.joined(separator: ", ")), or document MIME types \(bedrockSupportedDocumentMimeTypes.joined(separator: ", ")); got \(mimeType)."
-                            )
-                        }
-
-                        var document: [String: JSONValue] = [
-                            "format": .string(documentFormat),
-                            "name": .string(bedrockDocumentName(filename, documentCounter: &documentCounter)),
-                            "source": .object(["bytes": .string(data.base64EncodedString())])
-                        ]
-                        if enableDocumentCitations || bedrockDocumentCitationsEnabled(providerMetadata) {
-                            document["citations"] = .object(["enabled": .bool(true)])
-                        }
-                        content.append(.object(["document": .object(document)]))
-                        if let cachePoint = bedrockCachePoint(from: providerMetadata) {
-                            content.append(cachePoint)
-                        }
-                    case let .toolCall(call):
-                        if preparedTools.toolConfig == nil {
-                            warnings.append(AIWarning(
-                                type: "unsupported",
-                                feature: "toolContent",
-                                message: "Tool calls and results removed from conversation because Bedrock does not support tool content without active tools."
-                            ))
-                            content.append(.object(["text": .string("")]))
-                            continue
-                        }
-                        content.append(.object([
-                            "toolUse": .object([
-                                "toolUseId": .string(bedrockNormalizeToolCallID(call.id, modelID: modelID)),
-                                "name": .string(bedrockSanitizeToolName(call.name)),
-                                "input": bedrockToolArguments(call.arguments)
-                            ])
-                        ]))
-                    case let .toolResult(result):
-                        if preparedTools.toolConfig == nil {
-                            warnings.append(AIWarning(
-                                type: "unsupported",
-                                feature: "toolContent",
-                                message: "Tool calls and results removed from conversation because Bedrock does not support tool content without active tools."
-                            ))
-                            content.append(.object(["text": .string("")]))
-                            continue
-                        }
-                        content.append(.object([
-                            "toolResult": .object([
-                                "toolUseId": .string(bedrockNormalizeToolCallID(result.toolCallID, modelID: modelID)),
-                                "content": .array(try bedrockToolResultContent(result, documentCounter: &documentCounter)),
-                                "status": .string(result.isError ? "error" : "success")
-                            ])
-                        ]))
-                        if let cachePoint = bedrockCachePoint(from: result.providerMetadata) {
-                            content.append(cachePoint)
-                        }
-                    case .providerReference, .toolApprovalRequest, .toolApprovalResponse:
-                        content.append(.object(["text": .string("")]))
-                    }
-                }
-                if let cachePoint = bedrockCachePoint(from: message.providerMetadata) {
-                    content.append(cachePoint)
-                }
-
-                // Bedrock rejects empty Converse messages. Unsigned reasoning is
-                // intentionally filtered above, so drop an assistant turn when
-                // it has no replayable content left.
-                if message.role == .assistant,
-                   content.allSatisfy({ $0["cachePoint"] != nil }) {
-                    return nil
-                }
-
-                return JSONValue.object([
-                    "role": .string(message.role == .assistant ? "assistant" : "user"),
-                    "content": .array(content)
-                ])
-            }
-
-        var messages: [JSONValue] = []
-        for message in convertedMessages {
-            bedrockAppendConvertedMessage(message, to: &messages)
+        if let additionalModelRequestFields = preparedTools.additionalModelRequestFields {
+            var existing = providerOptions["additionalModelRequestFields"]?.objectValue ?? [:]
+            existing.merge(additionalModelRequestFields) { _, new in new }
+            providerOptions["additionalModelRequestFields"] = .object(existing)
         }
-
-        if var message = messages.last?.objectValue, message["role"]?.stringValue == "assistant",
-           var content = message["content"]?.arrayValue,
-           let index = content.lastIndex(where: { $0["text"] != nil }),
-           content.dropFirst(index + 1).allSatisfy({ $0["cachePoint"] != nil }),
-           var block = content[index].objectValue, let text = block["text"]?.stringValue {
-            block["text"] = .string(text.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression))
-            content[index] = .object(block)
-            message["content"] = .array(content)
-            messages[messages.count - 1] = .object(message)
+        let userBetas = providerOptions["anthropicBeta"]?.arrayValue
+        if !preparedTools.betas.isEmpty || userBetas != nil {
+            var existing = providerOptions["additionalModelRequestFields"]?.objectValue ?? [:]
+            existing["anthropic_beta"] = .array((userBetas ?? []) + preparedTools.betas.map(JSONValue.string))
+            providerOptions["additionalModelRequestFields"] = .object(existing)
         }
-        var body: [String: JSONValue] = ["messages": .array(messages)]
-        if !system.isEmpty { body["system"] = .array(system) }
 
         var inferenceConfig: [String: JSONValue] = [:]
         if let maxOutputTokens = request.maxOutputTokens { inferenceConfig["maxTokens"] = .number(Double(maxOutputTokens)) }
         if let temperature { inferenceConfig["temperature"] = .number(temperature) }
         if let topP { inferenceConfig["topP"] = .number(topP) }
         if let topK { inferenceConfig["topK"] = .number(Double(topK)) }
-        if !stopSequences.isEmpty { inferenceConfig["stopSequences"] = .array(stopSequences) }
+        if !request.stopSequences.isEmpty { inferenceConfig["stopSequences"] = .array(request.stopSequences.map(JSONValue.string)) }
         let reasoningConfig = providerOptions.removeValue(forKey: "reasoningConfig")
         bedrockApplyReasoningConfig(
             reasoningConfig,
@@ -561,99 +318,354 @@ public final class AmazonBedrockLanguageModel: LanguageModel, @unchecked Sendabl
             modelFamily: settings.modelFamily,
             inferenceConfig: &inferenceConfig,
             providerOptions: &providerOptions,
-            warnings: &warnings
+            warnings: &warnings,
+            nativeStructuredOutputSchema: useNativeStructuredOutput ? responseJSONSchema : nil
         )
-        if modelID.contains("amazon.nova-2-lite-v1:0"),
-           reasoningConfig?["type"]?.stringValue == "enabled",
-           ["high", "xhigh", "max"].contains(reasoningConfig?["maxReasoningEffort"]?.stringValue ?? ""),
-           inferenceConfig.removeValue(forKey: "maxTokens") != nil {
-            warnings.append(AIWarning(type: "unsupported", feature: "maxOutputTokens", message: "maxOutputTokens is not supported by \(modelID) when high reasoning is enabled and will be ignored"))
+        if isOpenAIModel {
+            let unsupportedFeatures = isOpenAIGptOssModel ? ["stopSequences"] : ["temperature", "topP", "stopSequences"]
+            for feature in unsupportedFeatures where inferenceConfig.removeValue(forKey: feature) != nil {
+                warnings.append(AIWarning(type: "unsupported", feature: feature, message: "\(feature) is not supported by this OpenAI model on the Converse API"))
+            }
+        }
+
+        var promptMessages = request.messages
+        let hasAnyTools = preparedTools.toolConfig != nil || preparedTools.additionalModelRequestFields != nil
+        if !hasAnyTools {
+            let hasToolContent = promptMessages.contains { message in
+                message.content.contains { part in
+                    switch part {
+                    case .toolCall, .toolResult: return true
+                    default: return false
+                    }
+                }
+            }
+            if hasToolContent {
+                promptMessages = promptMessages.compactMap { message in
+                    guard message.role != .system else { return message }
+                    var filtered = message
+                    filtered.content = message.content.filter { part in
+                        switch part {
+                        case .toolCall, .toolResult: return false
+                        default: return true
+                        }
+                    }
+                    return filtered.content.isEmpty ? nil : filtered
+                }
+                warnings.append(AIWarning(
+                    type: "unsupported",
+                    feature: "toolContent",
+                    message: "Tool calls and results removed from conversation because Bedrock does not support tool content without active tools."
+                ))
+            }
+        }
+
+        if usesJsonInstruction {
+            promptMessages = injectJSONInstruction(
+                into: promptMessages,
+                schema: responseJSONSchema,
+                instruction: AIJSONInstruction(
+                    schemaSuffix: "You MUST answer with only a JSON object that matches the JSON schema above. Do not wrap it in markdown fences or include any other text."
+                )
+            )
+        }
+
+        let converted = try bedrockConvertMessages(
+            promptMessages,
+            modelID: modelID,
+            enableDocumentCitations: enableDocumentCitations
+        )
+
+        var body: [String: JSONValue] = ["messages": .array(converted.messages)]
+        if !converted.system.isEmpty { body["system"] = .array(converted.system) }
+        if let additionalModelRequestFields = providerOptions["additionalModelRequestFields"] {
+            body["additionalModelRequestFields"] = additionalModelRequestFields
+        }
+        if isAnthropicModel {
+            body["additionalModelResponseFieldPaths"] = .array([.string("/delta/stop_sequence")])
         }
         if !inferenceConfig.isEmpty { body["inferenceConfig"] = .object(inferenceConfig) }
+        if let serviceTier = bedrockNonNull(providerOptions["serviceTier"]) {
+            body["serviceTier"] = serviceTier.stringValue.map { .object(["type": .string($0)]) } ?? serviceTier
+        }
+        if let requestMetadata = bedrockNonNull(providerOptions["requestMetadata"]) {
+            body["requestMetadata"] = requestMetadata
+        }
+        for (key, value) in rawNamespaceOptions where !bedrockParsedLanguageOptionKeys.contains(key) {
+            body[key] = value
+        }
         if let toolConfig = preparedTools.toolConfig {
             body["toolConfig"] = toolConfig
         }
-        bedrockApplyRequestProviderOptions(providerOptions, to: &body)
         body.merge(bedrockPassthroughExtraBody(request.extraBody)) { _, new in new }
         return BedrockPreparedConverseCall(
             body: .object(body),
-            warnings: bedrockDeduplicatedWarnings(warnings),
+            warnings: warnings,
             usesJsonResponseTool: usesJsonResponseTool,
             usesJsonInstruction: usesJsonInstruction
         )
     }
 }
 
-private func bedrockAppendConvertedMessage(
-    _ message: JSONValue,
-    to messages: inout [JSONValue]
-) {
-    guard message["role"]?.stringValue == "assistant",
-          let content = message["content"]?.arrayValue else {
-        bedrockAppendUserMessage(message, to: &messages)
-        return
-    }
+/// Keys that upstream removes from the raw `amazonBedrock`/`bedrock`
+/// namespace before spreading the remainder into the Converse body. The
+/// Swift-only call-level `citations` and `toolChoice` options are consumed here too.
+let bedrockParsedLanguageOptionKeys: Set<String> = [
+    "reasoningConfig",
+    "additionalModelRequestFields",
+    "serviceTier",
+    "structuredOutputMode",
+    "requestMetadata",
+    "citations",
+    "toolChoice"
+]
 
-    var segmentRole: String?
-    var segment: [JSONValue] = []
-
-    for block in content {
-        let nextRole: String
-        if block["toolResult"] != nil {
-            nextRole = "user"
-        } else if block["cachePoint"] != nil {
-            nextRole = segmentRole ?? "assistant"
-        } else {
-            nextRole = "assistant"
-        }
-
-        if let currentRole = segmentRole, currentRole != nextRole {
-            bedrockAppendConvertedSegment(
-                role: currentRole,
-                content: segment,
-                to: &messages
-            )
-            segment.removeAll(keepingCapacity: true)
-        }
-        segmentRole = nextRole
-        segment.append(block)
+/// JavaScript number formatting for warning text (`1.5`, `2`, `-0.5`).
+func bedrockJSNumber(_ value: Double) -> String {
+    if value.rounded() == value, abs(value) < 1e15 {
+        return String(Int(value))
     }
-    if let segmentRole {
-        bedrockAppendConvertedSegment(
-            role: segmentRole,
-            content: segment,
-            to: &messages
-        )
-    }
+    return String(value)
 }
 
-private func bedrockAppendConvertedSegment(
-    role: String,
-    content: [JSONValue],
-    to messages: inout [JSONValue]
-) {
-    guard !content.isEmpty else { return }
-    let converted: JSONValue = .object([
-        "role": .string(role),
-        "content": .array(content)
+/// Upstream JSON response tool: `{ name: 'json', description: 'Respond with a
+/// JSON object.', inputSchema: responseFormat.schema }` with the schema kept intact.
+func bedrockJSONResponseTool(schema: JSONValue) -> JSONValue {
+    .object([
+        "description": .string("Respond with a JSON object."),
+        "inputSchema": schema
     ])
-    if role == "user" {
-        bedrockAppendUserMessage(converted, to: &messages)
-    } else if content.contains(where: { $0["cachePoint"] == nil }) {
-        messages.append(converted)
-    }
 }
 
-private func bedrockAppendUserMessage(
-    _ message: JSONValue,
-    to messages: inout [JSONValue]
-) {
-    guard message["role"]?.stringValue == "user",
-          let content = message["content"]?.arrayValue else {
-        messages.append(message)
-        return
+struct BedrockConvertedMessages {
+    var system: [JSONValue]
+    var messages: [JSONValue]
+}
+
+/// Port of upstream `convertToAmazonBedrockChatMessages`: consecutive user and
+/// tool messages share one Bedrock user message, consecutive assistant
+/// messages share one assistant message, and system messages must lead.
+func bedrockConvertMessages(
+    _ prompt: [AIMessage],
+    modelID: String,
+    enableDocumentCitations: Bool = false
+) throws -> BedrockConvertedMessages {
+    enum BlockType { case system, user, assistant }
+    var blocks: [(type: BlockType, messages: [AIMessage])] = []
+    for message in prompt {
+        let type: BlockType
+        switch message.role {
+        case .system: type = .system
+        case .assistant: type = .assistant
+        case .user, .tool: type = .user
+        }
+        if blocks.last?.type == type {
+            blocks[blocks.count - 1].messages.append(message)
+        } else {
+            blocks.append((type, [message]))
+        }
     }
 
+    var system: [JSONValue] = []
+    var messages: [JSONValue] = []
+    var documentNames = BedrockDocumentNames()
+
+    for (blockIndex, block) in blocks.enumerated() {
+        let isLastBlock = blockIndex == blocks.count - 1
+        switch block.type {
+        case .system:
+            if !messages.isEmpty {
+                throw AIError.invalidArgument(
+                    argument: "messages",
+                    message: "'Multiple system messages that are separated by user/assistant messages' functionality not supported."
+                )
+            }
+            for message in block.messages {
+                for part in message.content {
+                    if let text = part.text {
+                        system.append(.object(["text": .string(text)]))
+                    }
+                }
+                if let cachePoint = bedrockCachePoint(from: message.providerMetadata) {
+                    system.append(cachePoint)
+                }
+            }
+
+        case .user:
+            var content: [JSONValue] = []
+            for message in block.messages {
+                for part in message.content {
+                    switch part {
+                    case let .text(text, providerMetadata):
+                        content.append(try bedrockGuardedTextBlock(text: text, providerMetadata: providerMetadata))
+                    case let .imageURL(url, providerMetadata):
+                        content.append(bedrockGuardedImageBlock(try bedrockS3ImageBlock(url), providerMetadata: providerMetadata))
+                    case let .data(mimeType, data, providerMetadata):
+                        content.append(try bedrockFileBlock(
+                            mimeType: mimeType,
+                            data: data,
+                            filename: nil,
+                            providerMetadata: providerMetadata,
+                            enableDocumentCitations: enableDocumentCitations,
+                            documentNames: &documentNames,
+                            argument: "messages.content.data.mimeType"
+                        ))
+                    case let .file(mimeType, data, filename, providerMetadata):
+                        content.append(try bedrockFileBlock(
+                            mimeType: mimeType,
+                            data: data,
+                            filename: filename,
+                            providerMetadata: providerMetadata,
+                            enableDocumentCitations: enableDocumentCitations,
+                            documentNames: &documentNames,
+                            argument: "messages.content.file.mimeType"
+                        ))
+                    case .providerReference:
+                        throw AIError.invalidArgument(
+                            argument: "messages.content.providerReference",
+                            message: "'file parts with provider references' functionality not supported."
+                        )
+                    case let .toolResult(result):
+                        content.append(.object([
+                            "toolResult": .object([
+                                "toolUseId": .string(bedrockNormalizeToolCallID(result.toolCallID, modelID: modelID)),
+                                "content": .array(try bedrockToolResultContent(result, documentCounter: &documentNames))
+                            ])
+                        ]))
+                    case let .reasoning(text, providerMetadata):
+                        if let reasoning = bedrockReasoningContentBlock(text: text, providerMetadata: providerMetadata) {
+                            content.append(reasoning)
+                        }
+                    case let .toolCall(call):
+                        content.append(.object([
+                            "toolUse": .object([
+                                "toolUseId": .string(bedrockNormalizeToolCallID(call.id, modelID: modelID)),
+                                "name": .string(bedrockSanitizeToolName(call.name)),
+                                "input": bedrockToolArguments(call.arguments)
+                            ])
+                        ]))
+                    case .reasoningFile, .custom, .toolApprovalRequest, .toolApprovalResponse:
+                        break
+                    }
+                    if case .toolApprovalResponse = part { continue }
+                    if let cachePoint = bedrockCachePoint(from: part.providerMetadata) {
+                        content.append(cachePoint)
+                    }
+                }
+                if let cachePoint = bedrockCachePoint(from: message.providerMetadata) {
+                    content.append(cachePoint)
+                }
+            }
+            bedrockAppendToUserMessage(&messages, content: content)
+
+        case .assistant:
+            var assistantContent: [JSONValue] = []
+            var toolResultContent: [JSONValue] = []
+
+            func flushAssistantContent() {
+                if assistantContent.contains(where: { $0["cachePoint"] == nil }) {
+                    messages.append(.object([
+                        "role": .string("assistant"),
+                        "content": .array(assistantContent)
+                    ]))
+                }
+                assistantContent = []
+            }
+            func flushToolResultContent() {
+                if !toolResultContent.isEmpty {
+                    bedrockAppendToUserMessage(&messages, content: toolResultContent)
+                    toolResultContent = []
+                }
+            }
+
+            for (messageIndex, message) in block.messages.enumerated() {
+                let isLastMessage = messageIndex == block.messages.count - 1
+                // Foreign empty text is metadata only. Remove it before finding
+                // the last part so assistant prefill trimming still applies.
+                let content = message.content.filter { part in
+                    guard case let .text(text, providerMetadata) = part else { return true }
+                    return !text.isEmpty
+                        || providerMetadata.isEmpty
+                        || providerMetadata["amazonBedrock"] != nil
+                        || providerMetadata["bedrock"] != nil
+                }
+                let hasReasoningBlocks = content.contains { part in
+                    if case .reasoning = part { return true }
+                    return false
+                }
+
+                for (partIndex, part) in content.enumerated() {
+                    let isLastContentPart = partIndex == content.count - 1
+                    var isToolResult = false
+                    if case .toolResult = part { isToolResult = true }
+                    if !isToolResult {
+                        flushToolResultContent()
+                    }
+
+                    switch part {
+                    case let .text(text, _):
+                        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !hasReasoningBlocks {
+                            break
+                        }
+                        // Bedrock rejects trailing whitespace in a prefilled
+                        // assistant response, so trim the final text part.
+                        let value = isLastBlock && isLastMessage && isLastContentPart
+                            ? text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            : text
+                        assistantContent.append(.object(["text": .string(value)]))
+                    case let .reasoning(text, providerMetadata):
+                        // Unsigned reasoning is intentionally not replayed.
+                        if let reasoning = bedrockReasoningContentBlock(text: text, providerMetadata: providerMetadata) {
+                            assistantContent.append(reasoning)
+                        }
+                    case let .toolCall(call):
+                        assistantContent.append(.object([
+                            "toolUse": .object([
+                                "toolUseId": .string(bedrockNormalizeToolCallID(call.id, modelID: modelID)),
+                                "name": .string(bedrockSanitizeToolName(call.name)),
+                                "input": bedrockToolArguments(call.arguments)
+                            ])
+                        ]))
+                    case let .toolResult(result):
+                        flushAssistantContent()
+                        toolResultContent.append(.object([
+                            "toolResult": .object([
+                                "toolUseId": .string(bedrockNormalizeToolCallID(result.toolCallID, modelID: modelID)),
+                                "content": .array(try bedrockToolResultContent(result, documentCounter: &documentNames))
+                            ])
+                        ]))
+                    default:
+                        break
+                    }
+
+                    if let cachePoint = bedrockCachePoint(from: part.providerMetadata) {
+                        if isToolResult {
+                            toolResultContent.append(cachePoint)
+                        } else {
+                            assistantContent.append(cachePoint)
+                        }
+                    }
+                }
+
+                if let cachePoint = bedrockCachePoint(from: message.providerMetadata) {
+                    if case .toolResult = content.last {
+                        toolResultContent.append(cachePoint)
+                    } else {
+                        assistantContent.append(cachePoint)
+                    }
+                }
+            }
+
+            flushToolResultContent()
+            flushAssistantContent()
+        }
+    }
+
+    return BedrockConvertedMessages(system: system, messages: messages)
+}
+
+/// A trailing assistant tool result and the following user content must share
+/// a single Bedrock user message so that conversation roles keep alternating.
+private func bedrockAppendToUserMessage(_ messages: inout [JSONValue], content: [JSONValue]) {
     if let lastIndex = messages.indices.last,
        messages[lastIndex]["role"]?.stringValue == "user",
        messages[lastIndex]["content"]?.arrayValue?.contains(where: { $0["toolResult"] != nil }) == true,
@@ -661,8 +673,71 @@ private func bedrockAppendUserMessage(
         previous["content"] = .array((previous["content"]?.arrayValue ?? []) + content)
         messages[lastIndex] = .object(previous)
     } else {
-        messages.append(message)
+        messages.append(.object([
+            "role": .string("user"),
+            "content": .array(content)
+        ]))
     }
+}
+
+private func bedrockS3ImageBlock(_ url: String) throws -> JSONValue {
+    guard bedrockIsS3URL(url), let imageFormat = bedrockImageFormat(forURL: url) else {
+        throw AIError.invalidArgument(
+            argument: "messages.content.imageURL",
+            message: "Amazon Bedrock Converse supports only s3:// image URLs ending in .jpg, .jpeg, .png, .gif, or .webp."
+        )
+    }
+    return .object([
+        "image": .object([
+            "format": .string(imageFormat),
+            "source": .object([
+                "s3Location": .object(["uri": .string(url)])
+            ])
+        ])
+    ])
+}
+
+private func bedrockFileBlock(
+    mimeType: String,
+    data: Data,
+    filename: String?,
+    providerMetadata: [String: JSONValue],
+    enableDocumentCitations: Bool,
+    documentNames: inout BedrockDocumentNames,
+    argument: String
+) throws -> JSONValue {
+    let resolvedMimeType = try resolveFullMediaType(mediaType: mimeType, data: data)
+    if let imageFormat = bedrockImageFormat(for: resolvedMimeType) {
+        return bedrockGuardedImageBlock(.object([
+            "image": .object([
+                "format": .string(imageFormat),
+                "source": .object(["bytes": .string(data.base64EncodedString())])
+            ])
+        ]), providerMetadata: providerMetadata)
+    }
+    if let videoFormat = bedrockVideoFormat(for: resolvedMimeType) {
+        return .object([
+            "video": .object([
+                "format": .string(videoFormat),
+                "source": .object(["bytes": .string(data.base64EncodedString())])
+            ])
+        ])
+    }
+    guard let documentFormat = bedrockDocumentFormat(for: resolvedMimeType) else {
+        throw AIError.invalidArgument(
+            argument: argument,
+            message: "Amazon Bedrock Converse supports image MIME types \(bedrockSupportedImageMimeTypes.joined(separator: ", ")), video MIME types \(bedrockSupportedVideoMimeTypes.joined(separator: ", ")), or document MIME types \(bedrockSupportedDocumentMimeTypes.joined(separator: ", ")); got \(mimeType)."
+        )
+    }
+    var document: [String: JSONValue] = [
+        "format": .string(documentFormat),
+        "name": .string(bedrockDocumentName(filename, documentCounter: &documentNames)),
+        "source": .object(["bytes": .string(data.base64EncodedString())])
+    ]
+    if enableDocumentCitations || bedrockDocumentCitationsEnabled(providerMetadata) {
+        document["citations"] = .object(["enabled": .bool(true)])
+    }
+    return .object(["document": .object(document)])
 }
 
 struct BedrockPreparedConverseCall {
