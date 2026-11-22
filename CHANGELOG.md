@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0
+## 1.3.0
 
-- Usage includes cache tokens like upstream, provider and response metadata arrive on the finish part, `stopSequence` paths, `anthropicBeta` forwarding, message grouping, blank text blocks and the stream state machine match upstream. Function tools send only their input schema; `maxImagesPerCall` is public (Nova Canvas 5, others 1).
-  Compatibility: Source-compatible; changes are additive. Request bodies, results, warnings and errors change to match the reviewed upstream package.
+- Align the provider request identity with @ai-sdk/amazon-bedrock 5.0.146 after comparing source, declarations and matching-release tests against 5.0.142. Offline validation passed: node Scripts/test-packages.mjs (56 packages, 3672 owning tests and 1760 compatibility tests), generation, tooling, isolation, and version selection. See Docs/Archive/WeeklyUpstreamAudit20261122.md for retained gaps. Paid provider calls were skipped.
+  Compatibility: Source-compatible request-header update. Requires SwiftAIOpenAICompatible 1.4.0 for the public image model conformance introduced in Core 1.6.0.
